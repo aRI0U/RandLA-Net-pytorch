@@ -1,0 +1,5 @@
+**/__pycache__
+data
+runs
+*.txt
+*.ply
