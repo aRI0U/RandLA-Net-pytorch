@@ -33,6 +33,15 @@ class PointCloudsDataset(Dataset):
 
     @staticmethod
     def load_ply(path, keep_zeros=True):
+        r"""
+            load the point cloud and labels of the ply file located in path
+
+            Args:
+                path: str
+                    path of the point cloud
+                keep_zeros: bool (optional)
+                    keep unclassified points
+        """
         cloud_ply = read_ply(path)
         points = np.vstack((cloud_ply['x'], cloud_ply['y'], cloud_ply['z'])).T
 
