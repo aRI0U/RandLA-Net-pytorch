@@ -64,7 +64,8 @@ On a separate terminal, launch:
 
 ## TODOs
 
-architecture:
-- change mlp to convolutions
-
 change knn method
+
+optimization:
+- replace read_ply mmap_mode
+- replace list by collections.deque in model
