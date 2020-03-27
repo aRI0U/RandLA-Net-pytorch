@@ -8,9 +8,27 @@
    git clone https://github.com/aRI0U/RandLA-Net-pytorch.git
    ```
 
-2. Install the dependencies
+2. Install all Python dependencies (TODO write `requirements.txt`)
 
-3. Download the dataset and prepare it:
+  ```sh
+    pip install -r requirements
+  ```
+
+3. Install `torch_points` package
+
+  Using `pip`...
+  ```sh
+    pip install git+https://github.com/nicolas-chaulet/torch-points.git
+  ```
+  ...or from source
+  ```sh
+    git clone https://github.com/nicolas-chaulet/torch-points.git
+    cd torch_points
+    python3 setup.py install
+    python3 -m unittest
+  ```
+
+4. Download the dataset and prepare it:
 
    ```sh
    cd RandLA-Net-pytorch/utils
