@@ -1,5 +1,7 @@
 # RandLA-Net: Efficient Semantic Segmentation of Large-Scale Point Clouds
 
+This repository contains a PyTorch implementation of [RandLA-Net](http://arxiv.org/abs/1911.11236).
+
 ## Preparation
 
 1. Clone this repository
@@ -11,16 +13,17 @@
 2. Install all Python dependencies (TODO write `requirements.txt`)
 
   ```sh
+    cd RandLA-Net-pytorch
     pip install -r requirements
   ```
 
 3. Install `torch_points` package
 
-  Using `pip`...
+  ⋅⋅⋅Using `pip`...
   ```sh
     pip install git+https://github.com/nicolas-chaulet/torch-points.git
   ```
-  ...or from source
+  ⋅⋅⋅...or from source
   ```sh
     git clone https://github.com/nicolas-chaulet/torch-points.git
     cd torch_points
@@ -44,7 +47,7 @@
   python3 train.py
   ```
 
-  Add flag `--gpu` to train the model on GPU instead of CPU.
+  ⋅⋅⋅Add flag `--gpu` to train the model on GPU instead of CPU.
 
 - Evaluate a model
 
@@ -73,3 +76,21 @@ optimization:
 - replace list by collections.deque in model
 - compute KNN only once in LFAs
 - see whether better method than `unsqueeze` + `repeat`
+
+## Citation
+
+This work implements the work presented in [RandLA-Net: Efficient Semantic Segmentation of Large-Scale Point Clouds](http://arxiv.org/abs/1911.11236).
+
+The original implementation (in TensorFlow 1) can be found [here](https://github.com/QingyongHu/RandLA-Net).
+
+To cite the original paper:
+  ```
+  @article{RandLA-Net,
+    arxivId = {1911.11236},
+    author = {Hu, Qingyong and Yang, Bo and Xie, Linhai and Rosa, Stefano and Guo, Yulan and Wang, Zhihua and Trigoni, Niki and Markham, Andrew},
+    eprint = {1911.11236},
+    title = {{RandLA-Net: Efficient Semantic Segmentation of Large-Scale Point Clouds}},
+    url = {http://arxiv.org/abs/1911.11236},
+    year = {2019}
+  }
+  ```
