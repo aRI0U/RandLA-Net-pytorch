@@ -65,18 +65,6 @@ On a separate terminal, launch:
   tensorboard --logdir runs
   ```
 
-## TODOs
-
-change knn method
-
-enable to run on GPU
-
-optimization:
-- replace read_ply mmap_mode
-- replace list by collections.deque in model
-- compute KNN only once in LFAs
-- see whether exists better method than `unsqueeze` + `repeat` or not
-
 ## Citation
 
 This work implements the work presented in [RandLA-Net: Efficient Semantic Segmentation of Large-Scale Point Clouds](http://arxiv.org/abs/1911.11236).
@@ -94,3 +82,10 @@ To cite the original paper:
     year = {2019}
   }
   ```
+
+
+## TODOs
+
+optimization:
+- replace read_ply mmap_mode
+- limit memory usage

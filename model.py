@@ -1,9 +1,9 @@
-from collections import deque
-
 import torch
 import torch.nn as nn
-# from torch_geometric.nn import knn
+
 from torch_points import knn
+
+USE_CUDA = torch.cuda.is_available()
 
 class SharedMLP(nn.Module):
     def __init__(
@@ -75,13 +75,16 @@ class LocalSpatialEncoding(nn.Module):
             -------
             torch.Tensor, shape (B, 2*d, N, K)
         """
-        K = self.num_neighbors
         # finding neighboring points
         idx, dist = knn_output
+        if USE_CUDA:
+            idx = idx.cuda()
+            dist = dist.cuda()
+        B, N, K = idx.size()
         # idx(B, N, K), coords(B, N, 3)
         # neighbors[b, i, n, k] = coords[b, idx[b, n, k], i] = extended_coords[b, i, extended_idx[b, i, n, k], k]
-        extended_idx = idx.unsqueeze(-3).repeat(1, 3, 1, 1)
-        extended_coords = coords.transpose(-2,-1).unsqueeze(-1).repeat(1, 1, 1, K)
+        extended_idx = idx.unsqueeze(1).expand(B, 3, N, K)
+        extended_coords = coords.transpose(-2,-1).unsqueeze(-1).expand(B, 3, N, K)
         neighbors = torch.gather(extended_coords, 2, extended_idx) # shape (B, 3, N, K)
 
         # relative point position encoding
@@ -94,7 +97,7 @@ class LocalSpatialEncoding(nn.Module):
 
         return torch.cat((
             self.mlp(concat),
-            features.repeat(1, 1, 1, K)
+            features.expand(B, -1, N, K)
         ), dim=-3)
 
 
@@ -281,15 +284,19 @@ class RandLANet(nn.Module):
             # upsampling
             idx = idx_stack.pop()
             new_coords = coords_saved[:,idx]
-            neighbors, _ = knn(coords, new_coords, 1) # shape (B, N, 1)
-            extended_neighbors = neighbors.unsqueeze(-3).repeat(1, x.size(-3), 1, 1)
+            neighbors, _ = knn(coords.cpu(), new_coords.cpu(), 1) # shape (B, N, 1)
+            if USE_CUDA:
+                neighbors = neighbors.cuda()
+
+            extended_neighbors = neighbors.unsqueeze(-3).expand(-1, x.size(1), -1, 1)
+
             # x_neighbors, shape (B, d, N, 1)
             # x_neighbors[b, d, n, i] = x[b, d, neighbors[b, n, i], i] = x[b, d, extended_neighbors[b, d, n, i], i]
             x_neighbors = torch.gather(x, -2, extended_neighbors)
             x = torch.cat((x_neighbors, x_stack.pop()), dim=-3)
             # print('dec')
             # print(x, x.shape)
-            print(x.shape)
+            # print(x.shape)
             x = mlp(x)
             # print('decoding')
             # print(x, x.shape)
@@ -305,17 +312,17 @@ class RandLANet(nn.Module):
 
 if __name__ == '__main__':
     import time
-    cloud = 1000*torch.randn(4, 2**12, 3)
+    cloud = 1000*torch.randn(2, 2**15, 3)
     model = RandLANet(6, 16, 4)
     # model.load_state_dict(torch.load('checkpoints/checkpoint_100.pth'))
     model.eval()
 
-    if False:#torch.cuda.is_available():
+    if USE_CUDA:
         model = model.cuda()
         cloud = cloud.cuda()
 
     t0 = time.time()
     pred = model(cloud)
     t1 = time.time()
-    print(pred)
+    # print(pred)
     print(t1-t0)
