@@ -19,11 +19,11 @@ This repository contains a PyTorch implementation of [RandLA-Net](http://arxiv.o
 
 3. Install `torch_points` package
 
-  ⋅⋅⋅Using `pip`...
+  Using `pip`...
   ```sh
     pip install git+https://github.com/nicolas-chaulet/torch-points.git
   ```
-  ⋅⋅⋅...or from source
+  ...or from source
   ```sh
     git clone https://github.com/nicolas-chaulet/torch-points.git
     cd torch_points
@@ -47,7 +47,7 @@ This repository contains a PyTorch implementation of [RandLA-Net](http://arxiv.o
   python3 train.py
   ```
 
-  ⋅⋅⋅Add flag `--gpu` to train the model on GPU instead of CPU.
+  Add flag `--gpu` to train the model on GPU instead of CPU.
 
 - Evaluate a model
 
@@ -75,7 +75,7 @@ optimization:
 - replace read_ply mmap_mode
 - replace list by collections.deque in model
 - compute KNN only once in LFAs
-- see whether better method than `unsqueeze` + `repeat`
+- see whether exists better method than `unsqueeze` + `repeat` or not
 
 ## Citation
 
