@@ -1,3 +1,5 @@
+from collections import deque
+
 import torch
 import torch.nn as nn
 # from torch_geometric.nn import knn
@@ -57,7 +59,7 @@ class LocalSpatialEncoding(nn.Module):
 
         self.mlp = SharedMLP(10, d, bn=True, activation_fn=nn.ReLU())
 
-    def forward(self, coords, features):
+    def forward(self, coords, features, knn_output):
         r"""
             Forward pass
 
@@ -67,6 +69,7 @@ class LocalSpatialEncoding(nn.Module):
                 coordinates of the point cloud
             features: torch.Tensor, shape (B, d, N, 1)
                 features of the point cloud
+            neighbors: tuple
 
             Returns
             -------
@@ -74,8 +77,7 @@ class LocalSpatialEncoding(nn.Module):
         """
         K = self.num_neighbors
         # finding neighboring points
-        print(coords.cpu().shape)
-        idx, dist = knn(coords.cpu(), coords.cpu(), K)
+        idx, dist = knn_output
         # idx(B, N, K), coords(B, N, 3)
         # neighbors[b, i, n, k] = coords[b, idx[b, n, k], i] = extended_coords[b, i, extended_idx[b, i, n, k], k]
         extended_idx = idx.unsqueeze(-3).repeat(1, 3, 1, 1)
@@ -133,6 +135,8 @@ class LocalFeatureAggregation(nn.Module):
     def __init__(self, d_in, d_out, num_neighbors):
         super(LocalFeatureAggregation, self).__init__()
 
+        self.num_neighbors = num_neighbors
+
         self.mlp1 = SharedMLP(d_in, d_out//2, activation_fn=nn.LeakyReLU(0.2))
         self.mlp2 = SharedMLP(d_out, 2*d_out)
         self.shortcut = SharedMLP(d_in, 2*d_out, bn=True)
@@ -160,13 +164,14 @@ class LocalFeatureAggregation(nn.Module):
             -------
             torch.Tensor, shape (B, 2*d_out, N, 1)
         """
+        knn_output = knn(coords.cpu(), coords.cpu(), self.num_neighbors)
 
         x = self.mlp1(features)
 
-        x = self.lse1(coords, x)
+        x = self.lse1(coords, x, knn_output)
         x = self.pool1(x)
 
-        x = self.lse2(coords, x)
+        x = self.lse2(coords, x, knn_output)
         x = self.pool2(x)
 
         return self.lrelu(self.mlp2(x) + self.shortcut(features))
@@ -187,7 +192,7 @@ class RandLANet(nn.Module):
         )
 
         # encoding layers
-        self.encoding = nn.ModuleList([
+        self.encoder = nn.ModuleList([
             LocalFeatureAggregation(8, 16, num_neighbors),
             LocalFeatureAggregation(32, 64, num_neighbors),
             LocalFeatureAggregation(128, 128, num_neighbors),
@@ -197,16 +202,16 @@ class RandLANet(nn.Module):
         self.mlp = SharedMLP(512, 512, activation_fn=nn.ReLU())
 
         # decoding layers
-        decoding_channels = [512, 256, 128, 32, 8]
-        self.decoding = nn.ModuleList([
-            SharedMLP(
-                decoding_channels[i],
-                decoding_channels[i+1],
-                transpose=True,
-                bn=True,
-                activation_fn=nn.ReLU()
-            )
-            for i in range(len(decoding_channels)-1)
+        decoder_kwargs = dict(
+            transpose=True,
+            bn=True,
+            activation_fn=nn.ReLU()
+        )
+        self.decoder = nn.ModuleList([
+            SharedMLP(1024, 256, **decoder_kwargs),
+            SharedMLP(512, 128, **decoder_kwargs),
+            SharedMLP(256, 32, **decoder_kwargs),
+            SharedMLP(64, 8, **decoder_kwargs)
         ])
 
         # final semantic prediction
@@ -231,7 +236,7 @@ class RandLANet(nn.Module):
             torch.Tensor, shape (B, N, num_classes)
                 segmentation scores for each point
         """
-        N = input.size(-2)
+        N = input.size(1)
         d = self.decimation
         # print('input')
         # print(input, input.shape)
@@ -249,7 +254,7 @@ class RandLANet(nn.Module):
         # x, shape (B, d, N, 1)
         idx_stack, x_stack = [], []
         idx = torch.arange(N)
-        for lfa in self.encoding:
+        for lfa in self.encoder:
             # print('.', end='', flush=True)
             x = lfa(coords, x)
             # print('lfa')
@@ -261,7 +266,7 @@ class RandLANet(nn.Module):
             # random downsampling
             decimation_ratio *= d
             idx = torch.randperm(N*d//decimation_ratio)[:N//decimation_ratio]
-            coords, x = coords[:,idx], x[...,idx]
+            coords, x = coords[:,idx], x[...,idx,:]
         # >>>>>>>>>> ENCODER
 
         # print()
@@ -270,19 +275,25 @@ class RandLANet(nn.Module):
         # print('mlp')
         # print(x, x.shape)
 
-        # print('Decoding the point cloud', end='', flush=True)
-        for mlp in self.decoding:
+        # <<<<<<<<<< DECODER
+        for mlp in self.decoder:
             # print('.', end='', flush=True)
             # upsampling
             idx = idx_stack.pop()
-            new_coords = coords_saved[idx]
-            neighbors, _ = knn(coords, new_coords, 1)
-            x = torch.cat((x[neighbors], x_stack.pop()), dim=-1)
+            new_coords = coords_saved[:,idx]
+            neighbors, _ = knn(coords, new_coords, 1) # shape (B, N, 1)
+            extended_neighbors = neighbors.unsqueeze(-3).repeat(1, x.size(-3), 1, 1)
+            # x_neighbors, shape (B, d, N, 1)
+            # x_neighbors[b, d, n, i] = x[b, d, neighbors[b, n, i], i] = x[b, d, extended_neighbors[b, d, n, i], i]
+            x_neighbors = torch.gather(x, -2, extended_neighbors)
+            x = torch.cat((x_neighbors, x_stack.pop()), dim=-3)
             # print('dec')
             # print(x, x.shape)
+            print(x.shape)
             x = mlp(x)
             # print('decoding')
             # print(x, x.shape)
+        # >>>>>>>>>> DECODER
 
         # print('\nDone.')
         scores = self.fc_end(x)
@@ -294,7 +305,7 @@ class RandLANet(nn.Module):
 
 if __name__ == '__main__':
     import time
-    cloud = 1000*torch.randn(1, 2**10, 3)
+    cloud = 1000*torch.randn(4, 2**12, 3)
     model = RandLANet(6, 16, 4)
     # model.load_state_dict(torch.load('checkpoints/checkpoint_100.pth'))
     model.eval()

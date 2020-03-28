@@ -66,6 +66,10 @@ On a separate terminal, launch:
 
 change knn method
 
+enable to run on GPU
+
 optimization:
 - replace read_ply mmap_mode
 - replace list by collections.deque in model
+- compute KNN only once in LFAs
+- see whether better method than `unsqueeze` + `repeat`
