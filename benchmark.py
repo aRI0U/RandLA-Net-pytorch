@@ -4,7 +4,6 @@ import os
 from utils.ply import read_ply
 import sys
 
-
 for path1 in sys.argv[1:]:
     path2 = path1[:-3] + 'npy'
     if os.path.exists(path2):
