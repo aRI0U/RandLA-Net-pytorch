@@ -1,4 +1,4 @@
-BASE_DIR='../data/semantic3d/original_data'
+BASE_DIR='../datasets/semantic3d/original_data'
 mkdir -p $BASE_DIR
 
 # Training data

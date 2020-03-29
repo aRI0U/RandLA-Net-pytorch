@@ -182,13 +182,13 @@ class LocalFeatureAggregation(nn.Module):
 
 
 class RandLANet(nn.Module):
-    def __init__(self, num_classes, num_neighbors, decimation):
+    def __init__(self, d_in, num_classes, num_neighbors, decimation):
         super(RandLANet, self).__init__()
         # self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.num_neighbors = num_neighbors
         self.decimation = decimation
 
-        self.fc_start = nn.Linear(3, 8)
+        self.fc_start = nn.Linear(d_in, 8)
         self.bn_start = nn.Sequential(
             nn.BatchNorm2d(8, eps=1e-6, momentum=0.99),
             nn.LeakyReLU(0.2)
@@ -312,8 +312,8 @@ class RandLANet(nn.Module):
 
 if __name__ == '__main__':
     import time
-    cloud = 1000*torch.randn(2, 2**15, 3)
-    model = RandLANet(6, 16, 4)
+    cloud = 1000*torch.randn(1000, 4096, 7)
+    model = RandLANet(7, 6, 16, 4)
     # model.load_state_dict(torch.load('checkpoints/checkpoint_100.pth'))
     model.eval()
 
