@@ -1,8 +1,9 @@
 import argparse
 from datetime import datetime
-from numpy import mean
+import numpy as np
 import os
 import time
+import warnings
 
 import torch
 import torch.nn as nn
@@ -12,12 +13,25 @@ from data import data_loader
 from model import RandLANet
 
 
+def evaluate(model, loader, criterion):
+    model.eval()
+    losses = []
+    with torch.no_grad():
+        for points, labels in loader:
+            pred = model(points)
+            loss = criterion(pred.squeeze(), labels.squeeze())
+            losses.append(loss.cpu().item())
+    return np.mean(losses)
+
+
 def train(args):
-    path = os.path.join(args.dataset, args.train_dir)
+    train_path = os.path.join(args.dataset, args.train_dir)
+    val_path = os.path.join(args.dataset, args.val_dir)
     logs_dir = os.path.join(args.logs_dir, args.name)
     os.makedirs(logs_dir, exist_ok=True)
 
-    loader = data_loader(path, train=True, is_cuda=args.gpu, batch_size=args.batch_size)
+    train_loader = data_loader(train_path, train=True, is_cuda=args.gpu, batch_size=args.batch_size)
+    val_loader = data_loader(val_path, train=True, is_cuda=args.gpu, batch_size=args.batch_size)
     # d_in = next(iter(loader)).size(-1)
 
     model = RandLANet(7, args.n_classes, args.neighbors, args.decimation)
@@ -33,7 +47,7 @@ def train(args):
         for epoch in range(1, args.epochs+1):
             model.train()
             losses = []
-            for points, labels in loader:
+            for points, labels in train_loader:
                 optimizer.zero_grad()
 
                 pred = model(points)
@@ -47,8 +61,16 @@ def train(args):
 
                 losses.append(loss.cpu().item())
 
-            print('[Epoch {:d}/{:d}]\tLoss: {:.7f}'.format(epoch, args.epochs, mean(losses)))
-            writer.add_scalar('Training loss', mean(losses), epoch)
+            loss = {
+                'Training loss':    np.mean(losses),
+                'Validation loss':  evaluate(model, val_loader, criterion)        
+            }
+            print(f'[Epoch {epoch:d}/{args.epochs:d}]', end='\t')
+            for k, v in loss.items():
+                print(f'{k}: {v:.7f}', end='\t')
+            print()
+            writer.add_scalars('Loss', loss, epoch)
+
 
             model.eval()
             print(model(points))
@@ -101,7 +123,9 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    args.gpu = args.gpu and torch.cuda.is_available()
+    if args.gpu and not torch.cuda.is_available():
+        warnings.warn('CUDA is not available on your machine. Running the algorithm on CPU...')
+        args.gpu = False
 
     if args.name is None:
         args.name = datetime.now().strftime('%Y-%m-%d_%H:%M')

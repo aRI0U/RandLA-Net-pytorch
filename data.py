@@ -27,7 +27,7 @@ class PointCloudsDataset(Dataset):
 
         points_tensor = torch.from_numpy(points)
 
-        labels_tensor = torch.from_numpy(labels).long() - 1 if self.train else None
+        labels_tensor = torch.from_numpy(labels).long() - 1
 
         if self.is_cuda:
             points_tensor = points_tensor.cuda()
@@ -52,7 +52,7 @@ class PointCloudsDataset(Dataset):
         cloud_npy = np.load(path, mmap_mode='r')
         points = cloud_npy[:, :7]
 
-        labels = None
+        labels = np.zeros(1)
         if not keep_zeros:
             labels = cloud_npy[:,-1]
 

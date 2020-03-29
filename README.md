@@ -88,6 +88,7 @@ To cite the original paper:
 
 make data.py support different input dims
 make cpu work
+os.path -> pathlib
 
 optimization:
 - replace read_ply mmap_mode
