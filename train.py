@@ -36,7 +36,7 @@ def train(args):
             losses = []
             for points, labels in loader:
                 optimizer.zero_grad()
-
+                print(points.shape)
                 pred = model(points)
 
                 loss = criterion(pred, labels)

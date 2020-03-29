@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 
-from torch_points import knn
+# from torch_points import knn
+from torch_points_kernels import knn
 
 USE_CUDA = torch.cuda.is_available()
 
