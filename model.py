@@ -1,8 +1,10 @@
 import torch
 import torch.nn as nn
 
-# from torch_points import knn
-from torch_points_kernels import knn
+try: # TODO: see if really necessary
+    from torch_points import knn
+except (ModuleNotFoundError, ImportError):
+    from torch_points_kernels import knn
 
 USE_CUDA = torch.cuda.is_available()
 

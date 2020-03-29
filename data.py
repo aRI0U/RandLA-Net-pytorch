@@ -18,12 +18,12 @@ class PointCloudsDataset(Dataset):
         idx = idx % self.size
         path = self.paths[idx]
 
-        if self.data_type=='npy' :
+        if self.data_type=='npy':
             points, labels = self.load_npy(path, keep_zeros=not self.train)
-        elif self.data_type=='ply' :
+        elif self.data_type=='ply':
             points, labels = self.load_ply(path, keep_zeros=not self.train)
         else :
-            raise 'unknown data type, compatible types are "npy" (prefered) and "ply" point clouds'
+            raise 'unknown data type, compatible types are "npy" (preferred) and "ply" point clouds'
 
         points_tensor = torch.from_numpy(points)
 
@@ -32,7 +32,7 @@ class PointCloudsDataset(Dataset):
         if self.is_cuda:
             points_tensor = points_tensor.cuda()
             labels_tensor = labels_tensor.cuda()
-
+        # print(points_tensor.dtype, labels_tensor.dtype)
         return points_tensor, labels_tensor
 
     def __len__(self):
@@ -54,7 +54,7 @@ class PointCloudsDataset(Dataset):
 
         labels = None
         if not keep_zeros:
-            labels = cloud_npy[:, -1]
+            labels = cloud_npy[:,-1]
 
             # balance training set
             points_list, labels_list = [], []
@@ -71,7 +71,7 @@ class PointCloudsDataset(Dataset):
             points = points[labeled]
             labels = labels[labeled]
 
-        return points.astype('float32'), labels.astype('float32')
+        return points, labels
 
     @staticmethod
     def load_ply(path, keep_zeros=True):
@@ -111,4 +111,4 @@ class PointCloudsDataset(Dataset):
 
 def data_loader(dir, train=False, is_cuda=False, **kwargs):
     dataset = PointCloudsDataset(dir, train, is_cuda)
-    return DataLoader(dataset, batch_size=None, **kwargs)
+    return DataLoader(dataset, **kwargs)

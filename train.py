@@ -11,17 +11,16 @@ from torch.utils.tensorboard import SummaryWriter
 from data import data_loader
 from model import RandLANet
 
-### parse args
-
-
 
 def train(args):
     path = os.path.join(args.dataset, args.train_dir)
     logs_dir = os.path.join(args.logs_dir, args.name)
     os.makedirs(logs_dir, exist_ok=True)
 
-    loader = data_loader(path, train=True, is_cuda=args.gpu)
-    model = RandLANet(args.n_classes, args.neighbors, args.decimation)
+    loader = data_loader(path, train=True, is_cuda=args.gpu, batch_size=args.batch_size)
+    # d_in = next(iter(loader)).size(-1)
+
+    model = RandLANet(7, args.n_classes, args.neighbors, args.decimation)
     criterion = nn.CrossEntropyLoss()
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.adam_lr)
@@ -36,12 +35,13 @@ def train(args):
             losses = []
             for points, labels in loader:
                 optimizer.zero_grad()
-                print(points.shape)
+
                 pred = model(points)
 
-                loss = criterion(pred, labels)
+                loss = criterion(pred.squeeze(), labels.squeeze())
 
                 loss.backward()
+
                 optimizer.step()
                 scheduler.step()
 
@@ -68,7 +68,7 @@ if __name__ == '__main__':
     misc = parser.add_argument_group('Miscellaneous')
 
     base.add_argument('--dataset', type=str, help='location of the dataset',
-                        default='./data/semantic3d')
+                        default='./datasets/semantic3d')
 
     expr.add_argument('--epochs', type=int, help='number of epochs',
                         default=200)
@@ -77,6 +77,8 @@ if __name__ == '__main__':
 
     param.add_argument('--adam_lr', type=float, help='learning rate of the optimizer',
                         default=1e-2)
+    param.add_argument('--batch_size', type=int, help='batch size',
+                        default=1)
     param.add_argument('--decimation', type=int, help='ratio the point cloud is divided by at each layer',
                         default=4)
     param.add_argument('--neighbors', type=int, help='number of neighbors considered by k-NN',

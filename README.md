@@ -86,6 +86,10 @@ To cite the original paper:
 
 ## TODOs
 
+make data.py support different input dims
+make cpu work
+
 optimization:
 - replace read_ply mmap_mode
 - limit memory usage
+- see whether cross entropy with dtype uint8 possible
