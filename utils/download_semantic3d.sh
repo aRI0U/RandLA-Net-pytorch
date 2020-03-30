@@ -1,4 +1,7 @@
-BASE_DIR='/media/tibo/Maxtor/Data/Deepdata/points_cloud/'#'../data/semantic3d/original_data'
+BASE_DIR='/media/tibo/Maxtor/Data/Deepdata/points_cloud/semantic3d/original_data'
+
+###../data/semantic3d/original_data
+
 mkdir -p $BASE_DIR
 
 # Training data

@@ -11,17 +11,18 @@ from torch.utils.tensorboard import SummaryWriter
 from data import data_loader
 from model import RandLANet
 
-### parse args
-
-
 
 def train(args):
     path = os.path.join(args.dataset, args.train_dir)
+    val_path = os.path.join(args.dataset, args.val_dir)
     logs_dir = os.path.join(args.logs_dir, args.name)
     os.makedirs(logs_dir, exist_ok=True)
 
-    loader = data_loader(path, train=True, is_cuda=args.gpu)
-    model = RandLANet(args.n_classes, args.neighbors, args.decimation)
+    loader = data_loader(path, train=True, is_cuda=args.gpu, batch_size=args.batch_size)
+    validation_loader = data_loader(val_path, train=True, is_cuda=args.gpu, batch_size=args.batch_size)
+    # d_in = next(iter(loader)).size(-1)
+
+    model = RandLANet(7, args.n_classes, args.neighbors, args.decimation)
     criterion = nn.CrossEntropyLoss()
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.adam_lr)
@@ -32,16 +33,19 @@ def train(args):
 
     with SummaryWriter(logs_dir) as writer:
         for epoch in range(1, args.epochs+1):
+
+            # Train
             model.train()
             losses = []
             for points, labels in loader:
                 optimizer.zero_grad()
-                print(points.shape)
+
                 pred = model(points)
 
-                loss = criterion(pred, labels)
+                loss = criterion(pred.squeeze(), labels.squeeze())
 
                 loss.backward()
+
                 optimizer.step()
                 scheduler.step()
 
@@ -51,7 +55,19 @@ def train(args):
             writer.add_scalar('Training loss', mean(losses), epoch)
 
             model.eval()
-            print(model(points))
+
+            # Validation
+            val_losses = []
+            for points, labels in validation_loader :
+
+                pred = model(points)
+
+                loss = criterion(pred.squeeze(), labels.squeeze())
+
+                val_losses.append(loss.cpu().item())
+
+            print('[Validation : epoch {:d}/{:d}]\tLoss: {:.7f}'.format(epoch, args.epochs, mean(val_losses)))
+            writer.add_scalar('Validation loss', mean(val_losses), epoch)
 
             if epoch % 10 == 0:
                 torch.save(model.state_dict(), 'runs/{}/checkpoint_{:d}.pth'.format(args.name, epoch))
@@ -68,15 +84,17 @@ if __name__ == '__main__':
     misc = parser.add_argument_group('Miscellaneous')
 
     base.add_argument('--dataset', type=str, help='location of the dataset',
-                        default='./data/semantic3d')
+                        default='/media/tibo/Maxtor/Data/Deepdata/points_cloud/semantic3d')
 
     expr.add_argument('--epochs', type=int, help='number of epochs',
-                        default=200)
+                        default=20)
     expr.add_argument('--n_classes', type=int, help='number of classes',
                         default=8)
 
     param.add_argument('--adam_lr', type=float, help='learning rate of the optimizer',
                         default=1e-2)
+    param.add_argument('--batch_size', type=int, help='batch size',
+                        default=1)
     param.add_argument('--decimation', type=int, help='ratio the point cloud is divided by at each layer',
                         default=4)
     param.add_argument('--neighbors', type=int, help='number of neighbors considered by k-NN',
