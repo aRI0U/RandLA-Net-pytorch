@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-try: # TODO: see if really necessary
+try:
     from torch_points import knn
 except (ModuleNotFoundError, ImportError):
     from torch_points_kernels import knn
