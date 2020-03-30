@@ -1,5 +1,6 @@
 import argparse
 from datetime import datetime
+import json
 import numpy as np
 import os
 import time
@@ -30,11 +31,19 @@ def train(args):
     logs_dir = os.path.join(args.logs_dir, args.name)
     os.makedirs(logs_dir, exist_ok=True)
 
+    # determine number of classes
+    try:
+        with open(os.path.join(args.dataset, 'classeds.json')) as f:
+            labels = json.load(f)
+            num_classes = len(labels.keys())
+    except FileNotFoundError:
+        num_classes = int(input("Number of distinct classes in the dataset: "))
+
     train_loader = data_loader(train_path, train=True, is_cuda=args.gpu, batch_size=args.batch_size)
     val_loader = data_loader(val_path, train=True, is_cuda=args.gpu, batch_size=args.batch_size)
-    # d_in = next(iter(loader)).size(-1)
+    d_in = next(iter(train_loader))[0].size(-1)
 
-    model = RandLANet(7, args.n_classes, args.neighbors, args.decimation)
+    model = RandLANet(d_in, num_classes, args.neighbors, args.decimation)
     criterion = nn.CrossEntropyLoss()
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.adam_lr)
@@ -63,7 +72,7 @@ def train(args):
 
             loss = {
                 'Training loss':    np.mean(losses),
-                'Validation loss':  evaluate(model, val_loader, criterion)        
+                'Validation loss':  evaluate(model, val_loader, criterion)
             }
             print(f'[Epoch {epoch:d}/{args.epochs:d}]', end='\t')
             for k, v in loss.items():
@@ -94,8 +103,6 @@ if __name__ == '__main__':
 
     expr.add_argument('--epochs', type=int, help='number of epochs',
                         default=200)
-    expr.add_argument('--n_classes', type=int, help='number of classes',
-                        default=8)
 
     param.add_argument('--adam_lr', type=float, help='learning rate of the optimizer',
                         default=1e-2)

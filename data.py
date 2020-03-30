@@ -50,7 +50,7 @@ class PointCloudsDataset(Dataset):
                     keep unclassified points
         """
         cloud_npy = np.load(path, mmap_mode='r')
-        points = cloud_npy[:, :7]
+        points = cloud_npy[:, :6]
 
         labels = np.zeros(1)
         if not keep_zeros:
