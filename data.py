@@ -1,5 +1,6 @@
 import glob
 import numpy as np
+import warnings
 
 import torch
 from torch.utils.data import Dataset, DataLoader
@@ -60,13 +61,17 @@ class PointCloudsDataset(Dataset):
             points_list, labels_list = [], []
             for i in range(1, len(np.unique(labels))):
                 try:
-                    idx = np.random.choice(len(labels[labels==i]), 10000)
+                    idx = np.random.choice(len(labels[labels==i]), 5000)
                     points_list.append(points[labels==i][idx])
                     labels_list.append(labels[labels==i][idx])
                 except ValueError:
                     continue
-            points = np.stack(points_list)
-            labels = np.stack(labels_list)
+            try:
+                points = np.stack(points_list)
+                labels = np.stack(labels_list)
+            except ValueError:
+                warnings.warn(path + ' is empty')
+                raise ValueError
             labeled = labels>0
             points = points[labeled]
             labels = labels[labeled]
@@ -95,7 +100,7 @@ class PointCloudsDataset(Dataset):
             points_list, labels_list = [], []
             for i in range(1, len(np.unique(labels))):
                 try:
-                    idx = np.random.choice(len(labels[labels==i]), 10000)
+                    idx = np.random.choice(len(labels[labels==i]), 8000)
                     points_list.append(points[labels==i][idx])
                     labels_list.append(labels[labels==i][idx])
                 except ValueError:

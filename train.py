@@ -33,7 +33,7 @@ def train(args):
 
     # determine number of classes
     try:
-        with open(os.path.join(args.dataset, 'classeds.json')) as f:
+        with open(os.path.join(args.dataset, 'classes.json')) as f:
             labels = json.load(f)
             num_classes = len(labels.keys())
     except FileNotFoundError:
@@ -54,9 +54,12 @@ def train(args):
 
     with SummaryWriter(logs_dir) as writer:
         for epoch in range(1, args.epochs+1):
+
+            # Train
             model.train()
             losses = []
             for points, labels in train_loader:
+                print(points.shape)
                 optimizer.zero_grad()
 
                 pred = model(points)
@@ -74,15 +77,13 @@ def train(args):
                 'Training loss':    np.mean(losses),
                 'Validation loss':  evaluate(model, val_loader, criterion)
             }
+
+            # Display results
             print(f'[Epoch {epoch:d}/{args.epochs:d}]', end='\t')
             for k, v in loss.items():
                 print(f'{k}: {v:.7f}', end='\t')
             print()
             writer.add_scalars('Loss', loss, epoch)
-
-
-            model.eval()
-            print(model(points))
 
             if epoch % 10 == 0:
                 torch.save(model.state_dict(), 'runs/{}/checkpoint_{:d}.pth'.format(args.name, epoch))
@@ -99,7 +100,7 @@ if __name__ == '__main__':
     misc = parser.add_argument_group('Miscellaneous')
 
     base.add_argument('--dataset', type=str, help='location of the dataset',
-                        default='./datasets/semantic3d')
+                        default='datasets/s3dis')
 
     expr.add_argument('--epochs', type=int, help='number of epochs',
                         default=200)
@@ -120,7 +121,7 @@ if __name__ == '__main__':
     dirs.add_argument('--train_dir', type=str, help='location of the training set in the dataset dir',
                         default='train')
     dirs.add_argument('--val_dir', type=str, help='location of the validation set in the dataset dir',
-                        default='val')
+                        default='test')
     dirs.add_argument('--logs_dir', type=str, help='path to tensorboard logs',
                         default='runs')
 

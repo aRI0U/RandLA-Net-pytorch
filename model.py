@@ -80,15 +80,14 @@ class LocalSpatialEncoding(nn.Module):
         """
         # finding neighboring points
         idx, dist = knn_output
-        if USE_CUDA:
-            idx = idx.cuda()
-            dist = dist.cuda()
         B, N, K = idx.size()
         # idx(B, N, K), coords(B, N, 3)
         # neighbors[b, i, n, k] = coords[b, idx[b, n, k], i] = extended_coords[b, i, extended_idx[b, i, n, k], k]
         extended_idx = idx.unsqueeze(1).expand(B, 3, N, K)
         extended_coords = coords.transpose(-2,-1).unsqueeze(-1).expand(B, 3, N, K)
         neighbors = torch.gather(extended_coords, 2, extended_idx) # shape (B, 3, N, K)
+        # if USE_CUDA:
+        #     neighbors = neighbors.cuda()
 
         # relative point position encoding
         concat = torch.cat((
@@ -97,6 +96,8 @@ class LocalSpatialEncoding(nn.Module):
             extended_coords - neighbors,
             dist.unsqueeze(-3)
         ), dim=-3)
+        if USE_CUDA:
+            concat = concat.cuda()
 
         return torch.cat((
             self.mlp(concat),
@@ -234,7 +235,7 @@ class RandLANet(nn.Module):
 
             Parameters
             ----------
-            input: torch.Tensor, shape (B, N, d)
+            input: torch.Tensor, shape (B, N, d_in)
                 input points
 
             Returns
@@ -246,34 +247,31 @@ class RandLANet(nn.Module):
         d = self.decimation
         # print('input')
         # print(input, input.shape)
-        coords = input[...,:3].clone()
+        coords = input[...,:3].clone().cpu()
         x = self.fc_start(input).transpose(-2,-1).unsqueeze(-1)
         x = self.bn_start(x) # shape (B, d, N, 1)
         # print('fc_start')
         # print(x, x.shape)
         decimation_ratio = 1
 
-        coords_saved = coords.clone()
-
         # <<<<<<<<<< ENCODER
         # coords, shape (B, N, 3)
-        # x, shape (B, d, N, 1)
-        idx_stack, x_stack = [], []
-        idx = torch.arange(N)
+        # x, shape (B, d_in, N, 1)
+        x_stack = []
+
+        permutation = torch.randperm(N)
+        coords = coords[:,permutation]
+        x = x[:,:,permutation]
+
         for lfa in self.encoder:
-            # print('.', end='', flush=True)
-            x = lfa(coords, x)
-            # print('lfa')
-            # print(x, x.shape)
-
-            idx_stack.append(idx.clone())
+            # at iteration i, x.shape = (B, N//(d**i), d_in)
+            x = lfa(coords[:,:N//decimation_ratio], x)
             x_stack.append(x.clone())
-
-            # random downsampling
             decimation_ratio *= d
-            idx = torch.randperm(N*d//decimation_ratio)[:N//decimation_ratio]
-            coords, x = coords[:,idx], x[...,idx,:]
-        # >>>>>>>>>> ENCODER
+            x = x[:,:,:N//decimation_ratio]
+
+
+        # # >>>>>>>>>> ENCODER
 
         # print()
 
@@ -285,22 +283,23 @@ class RandLANet(nn.Module):
         for mlp in self.decoder:
             # print('.', end='', flush=True)
             # upsampling
-            idx = idx_stack.pop()
-            new_coords = coords_saved[:,idx]
-            neighbors, _ = knn(coords.cpu(), new_coords.cpu(), 1) # shape (B, N, 1)
+            neighbors, _ = knn(coords[:,:N//decimation_ratio].cpu(), coords[:,:d*N//decimation_ratio].cpu(), 1) # shape (B, N, 1)
             if USE_CUDA:
                 neighbors = neighbors.cuda()
 
-            extended_neighbors = neighbors.unsqueeze(-3).expand(-1, x.size(1), -1, 1)
+            extended_neighbors = neighbors.unsqueeze(1).expand(-1, x.size(1), -1, 1)
 
             # x_neighbors, shape (B, d, N, 1)
             # x_neighbors[b, d, n, i] = x[b, d, neighbors[b, n, i], i] = x[b, d, extended_neighbors[b, d, n, i], i]
             x_neighbors = torch.gather(x, -2, extended_neighbors)
-            x = torch.cat((x_neighbors, x_stack.pop()), dim=-3)
+            # print('d', x_neighbors.shape, decimation_ratio)
+            x = torch.cat((x_neighbors, x_stack.pop()), dim=1)
             # print('dec')
             # print(x, x.shape)
             # print(x.shape)
             x = mlp(x)
+
+            decimation_ratio //= d
             # print('decoding')
             # print(x, x.shape)
         # >>>>>>>>>> DECODER
@@ -310,13 +309,14 @@ class RandLANet(nn.Module):
         return scores.squeeze(-1).transpose(-2,-1)
 
 
-
+## 2353 Mb
 
 
 if __name__ == '__main__':
     import time
-    cloud = 1000*torch.randn(1000, 4096, 7)
-    model = RandLANet(7, 6, 16, 4)
+    d_in = 7
+    cloud = 1000*torch.randn(1, 2**16, d_in)
+    model = RandLANet(d_in, 6, 16, 4)
     # model.load_state_dict(torch.load('checkpoints/checkpoint_100.pth'))
     model.eval()
 
