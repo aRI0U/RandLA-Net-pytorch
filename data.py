@@ -1,4 +1,3 @@
-import glob
 import numpy as np
 import warnings
 
@@ -8,11 +7,11 @@ from torch.utils.data import Dataset, DataLoader
 from utils.ply import read_ply
 
 class PointCloudsDataset(Dataset):
-    def __init__(self, dir, train=False, is_cuda=False, data_type='npy'):
-        self.paths = glob.glob(dir+'/*.' + data_type)
+    def __init__(self, dir, device, train=False, data_type='npy'):
+        self.paths = list(dir.glob(f'*.{data_type}'))
         self.size = len(self.paths)
         self.train = train
-        self.is_cuda = is_cuda
+        self.device = device
         self.data_type = data_type
 
     def __getitem__(self, idx):
@@ -26,13 +25,9 @@ class PointCloudsDataset(Dataset):
         else :
             raise 'unknown data type, compatible types are "npy" (preferred) and "ply" point clouds'
 
-        points_tensor = torch.from_numpy(points)
+        points_tensor = torch.from_numpy(points).to(self.device)
+        labels_tensor = torch.from_numpy(labels).long().to(self.device) - 1
 
-        labels_tensor = torch.from_numpy(labels).long() - 1
-
-        if self.is_cuda:
-            points_tensor = points_tensor.cuda()
-            labels_tensor = labels_tensor.cuda()
         # print(points_tensor.dtype, labels_tensor.dtype)
         return points_tensor, labels_tensor
 
@@ -51,30 +46,30 @@ class PointCloudsDataset(Dataset):
                     keep unclassified points
         """
         cloud_npy = np.load(path, mmap_mode='r')
+        # print(cloud_npy.shape)
         points = cloud_npy[:, :6]
 
         labels = np.zeros(1)
         if not keep_zeros:
             labels = cloud_npy[:,-1]
 
-            # balance training set
-            points_list, labels_list = [], []
-            for i in range(1, len(np.unique(labels))):
-                try:
-                    idx = np.random.choice(len(labels[labels==i]), 5000)
-                    points_list.append(points[labels==i][idx])
-                    labels_list.append(labels[labels==i][idx])
-                except ValueError:
-                    continue
-            try:
-                points = np.stack(points_list)
-                labels = np.stack(labels_list)
-            except ValueError:
-                warnings.warn(path + ' is empty')
-                raise ValueError
-            labeled = labels>0
-            points = points[labeled]
-            labels = labels[labeled]
+            # # balance training set
+            # points_list, labels_list = [], []
+            # for i in range(1, len(np.unique(labels))):
+            #     try:
+            #         idx = np.random.choice(len(labels[labels==i]), 1000000)
+            #         points_list.append(points[labels==i][idx])
+            #         labels_list.append(labels[labels==i][idx])
+            #     except ValueError:
+            #         continue
+            # try:
+            #     points = np.stack(points_list)
+            #     labels = np.stack(labels_list)
+            # except ValueError:
+            #     warnings.warn(str(path) + ' is empty')
+            # labeled = labels>0
+            # points = points[labeled]
+            # labels = labels[labeled]
 
         return points, labels
 
@@ -114,6 +109,6 @@ class PointCloudsDataset(Dataset):
 
         return points, labels
 
-def data_loader(dir, train=False, is_cuda=False, **kwargs):
-    dataset = PointCloudsDataset(dir, train, is_cuda)
+def data_loader(dir, device, train=False, **kwargs):
+    dataset = PointCloudsDataset(dir, device, train)
     return DataLoader(dataset, **kwargs)
