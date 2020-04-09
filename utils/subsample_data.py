@@ -19,9 +19,8 @@ VAL_PATH = 'val'
 sub_grid_size = 0.04
 
 for folder in [TRAIN_PATH, TEST_PATH, VAL_PATH]:
-    print(folder)
     (NEW_PATH / folder).mkdir(parents=True, exist_ok=True)
-    print(DATASET_PATH / folder)
+
     to_do_files = glob(str(DATASET_PATH / folder / '*.npy'))
 
     print('Folder :' + folder + ' Number of files to treat : ', len(to_do_files) )

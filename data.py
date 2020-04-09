@@ -55,23 +55,21 @@ class PointCloudsDataset(Dataset):
         if not keep_zeros:
             labels = cloud_npy[:,-1]
 
-            # # balance training set
-            # points_list, labels_list = [], []
-            # for i in range(1, len(np.unique(labels))):
-            #     try:
-            #         idx = np.random.choice(len(labels[labels==i]), 1000000)
-            #         points_list.append(points[labels==i][idx])
-            #         labels_list.append(labels[labels==i][idx])
-            #     except ValueError:
-            #         continue
-            # try:
-            #     points = np.stack(points_list)
-            #     labels = np.stack(labels_list)
-            # except ValueError:
-            #     warnings.warn(str(path) + ' is empty')
-            # labeled = labels>0
-            # points = points[labeled]
-            # labels = labels[labeled]
+            # balance training set
+            points_list, labels_list = [], []
+            for i in range(1, len(np.unique(labels))):
+                try:
+                    idx = np.random.choice(len(labels[labels==i]), 10000)
+                    points_list.append(points[labels==i][idx])
+                    labels_list.append(labels[labels==i][idx])
+                except ValueError:
+                    continue
+            if points_list :
+                points = np.stack(points_list)
+                labels = np.stack(labels_list)
+                labeled = labels>0
+                points = points[labeled]
+                labels = labels[labeled]
 
         return points, labels
 
@@ -124,7 +122,7 @@ class CloudsDataset(Dataset):
         self.input_colors = {'training': [], 'validation': []}
         self.input_labels = {'training': [], 'validation': []}
         self.input_names = {'training': [], 'validation': []}
-        self.val_split = '_1'
+        self.val_split = '1_'
         self.val_proj = []
         self.val_labels = []
 
@@ -148,8 +146,6 @@ class CloudsDataset(Dataset):
             data = np.load(sub_npy_file, mmap_mode='r').T
             sub_colors = data[:,3:6]
             sub_labels = data[:,-1].copy()
-            # Replace stairs labels with floor
-            sub_labels[sub_labels == 13] = 3
 
             # Read pkl with search tree
             with open(kd_tree_file, 'rb') as f:
@@ -178,8 +174,6 @@ class CloudsDataset(Dataset):
                 with open(proj_file, 'rb') as f:
                     proj_idx, labels = pickle.load(f)
 
-                # Replace stairs labels with floor
-                labels[labels == 13] = 3
                 self.val_proj += [proj_idx]
                 self.val_labels += [labels]
                 print('{:s} done in {:.1f}s'.format(cloud_name, time.time() - t0))
