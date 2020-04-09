@@ -60,7 +60,7 @@ def train(args):
         decimation=args.decimation,
         device=args.gpu
     )
-    [
+
     class_weights = np.array([1938651, 1242339, 608870, 1699694, 2794560, 195000, 115990, 549838, 531470, 292971, 196633, 59032, 209046, 39321])
     class_weights = torch.tensor((class_weights / float(sum(class_weights))).astype(np.float32)).to(device)
     criterion = nn.CrossEntropyLoss(weight=class_weights)
@@ -73,7 +73,7 @@ def train(args):
         path = max(list((args.logs_dir / args.load).glob('*.pth')))
         print(f'Loading {path}...')
         checkpoint = torch.load(path)
-        first_epoch = checkpoint['epoch']
+        first_epoch = checkpoint['epoch']+1
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
@@ -85,13 +85,9 @@ def train(args):
             model.train()
             losses = []
             for points, labels in tqdm(train_loader, desc='Training', leave=False):
-
                 optimizer.zero_grad()
-
                 pred = model(points)
-
                 loss = criterion(pred.squeeze(), labels.squeeze())
-
 
                 loss.backward()
 
@@ -139,7 +135,7 @@ if __name__ == '__main__':
     misc = parser.add_argument_group('Miscellaneous')
 
     base.add_argument('--dataset', type=Path, help='location of the dataset',
-                        default='/media/tibo/Maxtor/Data/Deepdata/points_cloud/s3dis/subsampled')
+                        default='datasets/s3dis')
 
     expr.add_argument('--epochs', type=int, help='number of epochs',
                         default=200)

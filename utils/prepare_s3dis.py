@@ -3,8 +3,8 @@ import json
 import numpy as np
 from pathlib import Path
 
-ROOT_PATH = (Path(__file__)  / '/media/tibo/Maxtor/Data/Deepdata/').resolve()
-DATASET_PATH = ROOT_PATH / 'points_cloud' / 's3dis'
+ROOT_PATH = (Path(__file__) / '..' / '..').resolve()
+DATASET_PATH = ROOT_PATH / 'datasets' / 's3dis'
 RAW_PATH = DATASET_PATH / 'Stanford3dDataset_v1.2'
 LABELS_PATH = DATASET_PATH / 'classes.json'
 TRAIN_PATH = DATASET_PATH / 'train'

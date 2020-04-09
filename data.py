@@ -122,7 +122,7 @@ class CloudsDataset(Dataset):
         self.input_colors = {'training': [], 'validation': []}
         self.input_labels = {'training': [], 'validation': []}
         self.input_names = {'training': [], 'validation': []}
-        self.val_split = '_1'
+        self.val_split = '1_'
         self.val_proj = []
         self.val_labels = []
 
@@ -146,8 +146,6 @@ class CloudsDataset(Dataset):
             data = np.load(sub_npy_file, mmap_mode='r').T
             sub_colors = data[:,3:6]
             sub_labels = data[:,-1].copy()
-            # Replace stairs labels with floor
-            sub_labels[sub_labels == 13] = 3
 
             # Read pkl with search tree
             with open(kd_tree_file, 'rb') as f:
@@ -176,8 +174,6 @@ class CloudsDataset(Dataset):
                 with open(proj_file, 'rb') as f:
                     proj_idx, labels = pickle.load(f)
 
-                # Replace stairs labels with floor
-                labels[labels == 13] = 3
                 self.val_proj += [proj_idx]
                 self.val_labels += [labels]
                 print('{:s} done in {:.1f}s'.format(cloud_name, time.time() - t0))
@@ -278,7 +274,7 @@ def data_loader(dir,  device, train=False, split='training', **kwargs):
     return batch_sampler #DataLoader(dataset, batch_sampler=batch_sampler, **kwargs)
 
 if __name__ == '__main__':
-    dataset = CloudsDataset('/media/tibo/Maxtor/Data/Deepdata/points_cloud/s3dis/subsampled/train')
+    dataset = CloudsDataset('datasets/s3dis/subsampled/train')
     batch_sampler = active_learning_batch_sampler(dataset)
     for data in batch_sampler:
         xyz, colors, labbels, idx, cloud_idx = data

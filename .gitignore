@@ -1,6 +1,7 @@
 **/__pycache__
 datasets
 runs
+<<<<<<< HEAD
 data
 *.txt
 *.ply
@@ -10,3 +11,10 @@ data
 *.hpp
 __pycache__
 events*
+=======
+*.txt
+*.ply
+utils/cpp_wrappers/*/build
+utils/cpp_wrappers/*/*.so
+
+>>>>>>> 3a7bb04f6b819c33707a35e78eebec76e7baef0b

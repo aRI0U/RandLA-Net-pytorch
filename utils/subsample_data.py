@@ -9,8 +9,8 @@ import pickle
 from tools import DataProcessing as DP
 import cpp_wrappers.cpp_subsampling.grid_subsampling as cpp_subsampling
 
-ROOT_PATH = (Path(__file__)  / '/media/tibo/Maxtor/Data/Deepdata/').resolve()
-DATASET_PATH = ROOT_PATH / 'points_cloud' / 's3dis'
+ROOT_PATH = (Path(__file__)  / '..' / '..').resolve()
+DATASET_PATH = ROOT_PATH / 'datasets' / 's3dis'
 NEW_PATH = DATASET_PATH / 'reprocessed'
 LABELS_PATH = DATASET_PATH / 'classes.json'
 TRAIN_PATH = 'train'

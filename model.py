@@ -170,9 +170,7 @@ class LocalFeatureAggregation(nn.Module):
             -------
             torch.Tensor, shape (B, 2*d_out, N, 1)
         """
-        cpu_coords = coords.cpu()
-        knn_output = knn(cpu_coords, cpu_coords, self.num_neighbors)
-        # knn_output.to(self.device)
+        knn_output = knn(coords.cpu(), coords.cpu(), self.num_neighbors)
 
         x = self.mlp1(features)
 
@@ -192,6 +190,7 @@ class RandLANet(nn.Module):
         # self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.num_neighbors = num_neighbors
         self.decimation = decimation
+
         self.fc_start = nn.Linear(d_in, 8)
         self.bn_start = nn.Sequential(
             nn.BatchNorm2d(8, eps=1e-6, momentum=0.99),
@@ -228,8 +227,8 @@ class RandLANet(nn.Module):
             nn.Dropout(),
             SharedMLP(32, num_classes)
         )
-
         self.device = device
+
         self = self.to(device)
 
     def forward(self, input):
