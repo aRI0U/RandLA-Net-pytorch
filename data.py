@@ -5,6 +5,7 @@ from os.path import join
 import torch
 from torch.utils.data import Dataset, DataLoader, Sampler, BatchSampler
 
+from config import cfg
 from utils.ply import read_ply
 from utils.tools import DataProcessing as DP
 
@@ -27,7 +28,7 @@ class PointCloudsDataset(Dataset):
         else :
             raise 'unknown data type, compatible types are "npy" (preferred) and "ply" point clouds'
 
-        points_tensor = torch.from_numpy(points).to(self.device)
+        points_tensor = torch.from_numpy(points).float().to(self.device)
         labels_tensor = torch.from_numpy(labels).long().to(self.device) - 1
 
         # print(points_tensor.dtype, labels_tensor.dtype)
@@ -59,7 +60,7 @@ class PointCloudsDataset(Dataset):
             points_list, labels_list = [], []
             for i in range(1, len(np.unique(labels))):
                 try:
-                    idx = np.random.choice(len(labels[labels==i]), 10000)
+                    idx = np.random.choice(len(labels[labels==i]), 8000)
                     points_list.append(points[labels==i][idx])
                     labels_list.append(labels[labels==i][idx])
                 except ValueError:
@@ -209,9 +210,9 @@ class active_learning_batch_sampler(BatchSampler):
     def spatially_regular_gen(self):
 
         if self.split == 'training':
-            num_per_epoch = 500 #cfg.train_steps * cfg.batch_size
+            num_per_epoch = 50 #cfg.train_steps * cfg.batch_size
         elif self.split == 'validation':
-            num_per_epoch = 100 #cfg.val_steps * cfg.val_batch_size
+            num_per_epoch = 10 #cfg.val_steps * cfg.val_batch_size
         # Generator loop
         for i in range(num_per_epoch):  # num_per_epoch
             # t0 = time.time()
@@ -232,10 +233,10 @@ class active_learning_batch_sampler(BatchSampler):
             noise = np.random.normal(scale=3.5 / 10, size=center_point.shape)
             pick_point = center_point + noise.astype(center_point.dtype)
 
-            if len(points) < 40960:
+            if len(points) < cfg.num_points:
                 queried_idx = self.dataset.input_trees[self.split][cloud_idx].query(pick_point, k=len(points))[1][0]
             else:
-                queried_idx = self.dataset.input_trees[self.split][cloud_idx].query(pick_point, k=40960)[1][0]
+                queried_idx = self.dataset.input_trees[self.split][cloud_idx].query(pick_point, k=cfg.num_points)[1][0]
 
             queried_idx = DP.shuffle_idx(queried_idx)
             # Collect points and colors
@@ -249,9 +250,9 @@ class active_learning_batch_sampler(BatchSampler):
             self.possibility[self.split][cloud_idx][queried_idx] += delta
             self.min_possibility[self.split][cloud_idx] = float(np.min(self.possibility[self.split][cloud_idx]))
 
-            if len(points) < 40960:
+            if len(points) < cfg.num_points:
                 queried_pc_xyz, queried_pc_colors, queried_idx, queried_pc_labels = \
-                    DP.data_aug(queried_pc_xyz, queried_pc_colors, queried_pc_labels, queried_idx, 40960)
+                    DP.data_aug(queried_pc_xyz, queried_pc_colors, queried_pc_labels, queried_idx, cfg.num_points)
 
             queried_pc_xyz = torch.from_numpy(queried_pc_xyz.astype(np.float32)).to(self.device)
             queried_pc_colors = torch.from_numpy(queried_pc_colors.astype(np.float32)).to(self.device)
@@ -262,16 +263,16 @@ class active_learning_batch_sampler(BatchSampler):
             points = torch.cat( (queried_pc_xyz, queried_pc_colors), 1)
             # print('time in seconds : ', time.time() - t0)
 
-            yield ( torch.reshape(points, (1, 40960, 6)),  torch.reshape(queried_pc_labels, (1, 40960)).long())
+            yield ( torch.reshape(points, (1, cfg.num_points, 6)),  torch.reshape(queried_pc_labels, (1, cfg.num_points)).long())
 
-# def data_loader(dir, device, train=False, **kwargs):
+# def data_loader(dir, device, train=False, split='training', **kwargs):
 #     dataset = PointCloudsDataset(dir, device, train)
 #     return DataLoader(dataset, **kwargs)
 
 def data_loader(dir,  device, train=False, split='training', **kwargs):
     dataset = CloudsDataset(dir, device, train)
     batch_sampler = active_learning_batch_sampler(dataset, device, split=split)
-    return batch_sampler #DataLoader(dataset, batch_sampler=batch_sampler, **kwargs)
+    return batch_sampler
 
 if __name__ == '__main__':
     dataset = CloudsDataset('datasets/s3dis/subsampled/train')
