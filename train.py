@@ -13,6 +13,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from data import data_loader
 from model import RandLANet
+from config import cfg
 
 USE_CUDA = torch.cuda.is_available()
 device = 'cuda' if USE_CUDA else 'cpu'
@@ -21,12 +22,16 @@ device = 'cuda' if USE_CUDA else 'cpu'
 def evaluate(model, loader, criterion):
     model.eval()
     losses = []
+    accuracies = []
     with torch.no_grad():
         for points, labels in tqdm(loader, desc='Validation', leave=False):
             pred = model(points)
             loss = criterion(pred.squeeze(), labels.squeeze())
+            pred_labels = torch.argmax(pred[0], 1)
+            correct = (pred_labels == labels[0]).float().sum()
+            accuracies.append((correct/points.shape[1]).cpu().item())
             losses.append(loss.cpu().item())
-    return np.mean(losses)
+    return np.mean(losses), np.mean(accuracies)
 
 
 def train(args):
@@ -61,7 +66,7 @@ def train(args):
         device=args.gpu
     )
 
-    class_weights = np.array([1938651, 1242339, 608870, 1699694, 2794560, 195000, 115990, 549838, 531470, 292971, 196633, 59032, 209046, 39321])
+    class_weights = np.array(cfg.class_weights)
     class_weights = torch.tensor((class_weights / float(sum(class_weights))).astype(np.float32)).to(args.gpu)
     criterion = nn.CrossEntropyLoss(weight=class_weights)
 
@@ -84,6 +89,7 @@ def train(args):
             # Train
             model.train()
             losses = []
+            accuracies = []
             for points, labels in tqdm(train_loader, desc='Training', leave=False):
                 optimizer.zero_grad()
                 pred = model(points)
@@ -95,19 +101,34 @@ def train(args):
                 scheduler.step()
 
                 losses.append(loss.cpu().item())
+                pred_labels = torch.argmax(pred[0], 1)
+                correct = (pred_labels == labels[0]).float().sum()
+                accuracies.append((correct/points.shape[1]).cpu().item())
 
-            loss = {
+            val_loss, val_acc = evaluate(model, val_loader, criterion)
+
+            loss_dic = {
                 'Training loss':    np.mean(losses),
-                'Validation loss':  evaluate(model, val_loader, criterion)
+                'Validation loss': val_loss
             }
+
+            accuracy_dic = {
+                'Training accuracy':    np.mean(accuracies),
+                'Validation accuracy':  val_acc
+            }
+
             t1 = time.time()
             # Display results
             print(f'[Epoch {epoch:d}/{args.epochs:d}]', end='\t')
-            for k, v in loss.items():
+            for k, v in loss_dic.items():
+                print(f'{k}: {v:.7f}', end='\t')
+
+            for k, v in accuracy_dic.items():
                 print(f'{k}: {v:.7f}', end='\t')
             d = t1 - t0
             print('\tTime elapsed:', '{:.0f} s'.format(d) if d < 60 else '{:.0f} min {:.0f} s'.format(*divmod(d, 60)))
-            writer.add_scalars('Loss', loss, epoch)
+            writer.add_scalars('Loss', loss_dic, epoch)
+            writer.add_scalars('Accuracy', accuracy_dic, epoch)
 
             if epoch % args.save_freq == 0:
                 torch.save(
@@ -151,7 +172,7 @@ if __name__ == '__main__':
     param.add_argument('--neighbors', type=int, help='number of neighbors considered by k-NN',
                         default=16)
     param.add_argument('--scheduler_gamma', type=float, help='gamma of the learning rate scheduler',
-                        default=0.99)
+                        default=0.95)
 
     dirs.add_argument('--test_dir', type=str, help='location of the test set in the dataset dir',
                         default='test')
