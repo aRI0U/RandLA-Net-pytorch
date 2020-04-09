@@ -58,7 +58,7 @@ def train(args):
         device=args.gpu
     )
     class_weights = np.array([3370714, 2856755, 4919229, 318158, 375640, 478001, 974733, 650464, 791496, 88727, 1284130, 229758, 2272837])
-    class_weights = torch.tensor((class_weights / float(sum(class_weights))).astype(np.float32)).to(device)
+    class_weights = torch.tensor((class_weights / float(sum(class_weights))).astype(np.float32)).to(args.gpu)
     criterion = nn.CrossEntropyLoss(weight=class_weights)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.adam_lr)
@@ -131,7 +131,7 @@ if __name__ == '__main__':
     misc = parser.add_argument_group('Miscellaneous')
 
     base.add_argument('--dataset', type=Path, help='location of the dataset',
-                        default='datasets/s3dis')
+                        default='datasets/s3dis/reprocessed')
 
     expr.add_argument('--epochs', type=int, help='number of epochs',
                         default=200)
