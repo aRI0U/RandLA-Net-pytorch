@@ -1,0 +1,12 @@
+**/__pycache__
+datasets
+runs
+data
+*.txt
+*.ply
+*.npy
+*.o
+*.so
+*.hpp
+__pycache__
+events*
