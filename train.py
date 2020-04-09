@@ -68,7 +68,7 @@ def train(args):
         path = max(list((args.logs_dir / args.load).glob('*.pth')))
         print(f'Loading {path}...')
         checkpoint = torch.load(path)
-        first_epoch = checkpoint['epoch']
+        first_epoch = checkpoint['epoch']+1
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
