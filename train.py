@@ -44,12 +44,11 @@ def train(args):
         train_path,
         device=args.gpu,
         train=True,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
-        shuffle=True
+        split='training',
+        num_workers=args.num_workers
     )
-    val_loader = data_loader(val_path, device=args.gpu, train=True, batch_size=args.batch_size)
-    d_in = next(iter(train_loader))[0].size(-1)
+    val_loader = data_loader(train_path, device=args.gpu, train=True, split='validation', batch_size=args.batch_size)
+    d_in = 6 # next(iter(train_loader))[0].size(-1)
 
     model = RandLANet(
         d_in,
@@ -58,7 +57,9 @@ def train(args):
         decimation=args.decimation,
         device=args.gpu
     )
-    criterion = nn.CrossEntropyLoss()
+    class_weights = np.array([3370714, 2856755, 4919229, 318158, 375640, 478001, 974733, 650464, 791496, 88727, 1284130, 229758, 2272837])
+    class_weights = torch.tensor((class_weights / float(sum(class_weights))).astype(np.float32)).to(device)
+    criterion = nn.CrossEntropyLoss(weight=class_weights)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.adam_lr)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, args.scheduler_gamma)

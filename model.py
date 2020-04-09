@@ -319,7 +319,7 @@ if __name__ == '__main__':
     # model.load_state_dict(torch.load('checkpoints/checkpoint_100.pth'))
     model.eval()
 
-    if USE_CUDA:
+    if torch.cuda.is_available():
         model = model.cuda()
         cloud = cloud.cuda()
 
