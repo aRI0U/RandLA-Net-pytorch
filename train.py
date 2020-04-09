@@ -60,7 +60,8 @@ def train(args):
         decimation=args.decimation,
         device=args.gpu
     )
-    class_weights = np.array([3370714, 2856755, 4919229, 318158, 375640, 478001, 974733, 650464, 791496, 88727, 1284130, 229758, 2272837])
+    [
+    class_weights = np.array([1938651, 1242339, 608870, 1699694, 2794560, 195000, 115990, 549838, 531470, 292971, 196633, 59032, 209046, 39321])
     class_weights = torch.tensor((class_weights / float(sum(class_weights))).astype(np.float32)).to(device)
     criterion = nn.CrossEntropyLoss(weight=class_weights)
 
