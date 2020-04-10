@@ -19,12 +19,12 @@ USE_CUDA = torch.cuda.is_available()
 device = 'cuda' if USE_CUDA else 'cpu'
 
 
-def evaluate(model, loader, criterion):
+def evaluate(model, loader, criterion, desc=None):
     model.eval()
     losses = []
     accuracies = []
     with torch.no_grad():
-        for points, labels in tqdm(loader, desc='Validation', leave=False):
+        for points, labels in tqdm(loader, desc=desc, leave=False):
             pred = model(points)
             loss = criterion(pred.squeeze(), labels.squeeze())
             pred_labels = torch.argmax(pred[0], 1)
@@ -90,7 +90,7 @@ def train(args):
             model.train()
             losses = []
             accuracies = []
-            for points, labels in tqdm(train_loader, desc='Training', leave=False):
+            for points, labels in tqdm(train_loader, desc=f'[Epoch {epoch:d}/{args.epochs:d}]\tTraining', leave=False):
                 optimizer.zero_grad()
                 pred = model(points)
                 loss = criterion(pred.squeeze(), labels.squeeze())
@@ -105,7 +105,7 @@ def train(args):
                 correct = (pred_labels == labels[0]).float().sum()
                 accuracies.append((correct/points.shape[1]).cpu().item())
 
-            val_loss, val_acc = evaluate(model, val_loader, criterion)
+            val_loss, val_acc = evaluate(model, val_loader, criterion, desc=f'[Epoch {epoch:d}/{args.epochs:d}]\tValidation')
 
             loss_dic = {
                 'Training loss':    np.mean(losses),
