@@ -15,6 +15,10 @@ from data import data_loader
 from model import RandLANet
 from config import cfg
 
+def accuracy(scores, labels):
+    predictions = torch.max(scores, dim=1).indices
+    return (predictions == labels).float().mean()
+
 def evaluate(model, loader, criterion, device, desc=None):
     model.eval()
     losses = []
@@ -23,11 +27,9 @@ def evaluate(model, loader, criterion, device, desc=None):
         for points, labels in tqdm(loader, desc=desc, leave=False):
             points = points.to(device)
             labels = labels.to(device)
-            pred = model(points)
-            loss = criterion(pred.squeeze(), labels.squeeze())
-            pred_labels = torch.argmax(pred[0], 1)
-            correct = (pred_labels == labels[0]).float().sum()
-            accuracies.append((correct/points.shape[1]).cpu().item())
+            scores = model(points)
+            loss = criterion(scores, labels)
+            accuracies.append(accuracy(scores, labels).cpu().item())
             losses.append(loss.cpu().item())
     return np.mean(losses), np.mean(accuracies)
 
@@ -101,8 +103,8 @@ def train(args):
                 points = points.to(args.gpu)
                 labels = labels.to(args.gpu)
                 optimizer.zero_grad()
-                pred = model(points)
-                loss = criterion(pred.squeeze(), labels.squeeze())
+                scores = model(points)
+                loss = criterion(scores, labels)
 
                 loss.backward()
 
@@ -110,9 +112,7 @@ def train(args):
                 scheduler.step()
 
                 losses.append(loss.cpu().item())
-                pred_labels = torch.argmax(pred[0], 1)
-                correct = (pred_labels == labels[0]).float().sum()
-                accuracies.append((correct/points.shape[1]).cpu().item())
+                accuracies.append(accuracy(scores, labels).cpu().item())
 
             val_loss, val_acc = evaluate(
                 model,

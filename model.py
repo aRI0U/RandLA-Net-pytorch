@@ -169,7 +169,7 @@ class LocalFeatureAggregation(nn.Module):
             -------
             torch.Tensor, shape (B, 2*d_out, N, 1)
         """
-        knn_output = knn(coords.cpu(), coords.cpu(), self.num_neighbors)
+        knn_output = knn(coords.cpu().contiguous(), coords.cpu().contiguous(), self.num_neighbors)
 
         x = self.mlp1(features)
 
@@ -284,7 +284,11 @@ class RandLANet(nn.Module):
         for mlp in self.decoder:
             # print('.', end='', flush=True)
             # upsampling
-            neighbors, _ = knn(coords[:,:N//decimation_ratio].cpu(), coords[:,:d*N//decimation_ratio].cpu(), 1) # shape (B, N, 1)
+            neighbors, _ = knn(
+                coords[:,:N//decimation_ratio].cpu().contiguous(), # original set
+                coords[:,:d*N//decimation_ratio].cpu().contiguous(), # upsampled set
+                1
+            ) # shape (B, N, 1)
             neighbors = neighbors.to(self.device)
 
             extended_neighbors = neighbors.unsqueeze(1).expand(-1, x.size(1), -1, 1)
@@ -306,7 +310,8 @@ class RandLANet(nn.Module):
 
         # print('\nDone.')
         scores = self.fc_end(x)
-        return scores.squeeze(-1).transpose(-2,-1)
+
+        return scores.squeeze(-1)
 
 
 ## 2353 Mb
