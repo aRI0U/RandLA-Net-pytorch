@@ -114,7 +114,7 @@ class PointCloudsDataset(Dataset):
 class CloudsDataset(Dataset):
     def __init__(self, dir, device, train=False, data_type='npy'):
         self.path = dir
-        self.paths = glob.glob(str(dir / ('*.' + data_type)))
+        self.paths = list(dir.glob(f'*.{data_type}'))
         self.size = len(self.paths)
         self.device = device
         self.train = train
@@ -134,7 +134,7 @@ class CloudsDataset(Dataset):
     def load_data(self):
         for i, file_path in enumerate(self.paths):
             t0 = time.time()
-            cloud_name = file_path.split('/')[-1][:-4]
+            cloud_name = file_path.stem
             if self.val_split in cloud_name:
                 cloud_split = 'validation'
             else:
@@ -167,7 +167,7 @@ class CloudsDataset(Dataset):
 
         for i, file_path in enumerate(self.paths):
             t0 = time.time()
-            cloud_name = file_path.split('/')[-1][:-4]
+            cloud_name = file_path.stem
 
             # Validation projection and labels
             if self.val_split in cloud_name:
