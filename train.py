@@ -15,16 +15,14 @@ from data import data_loader
 from model import RandLANet
 from config import cfg
 
-USE_CUDA = torch.cuda.is_available()
-device = 'cuda' if USE_CUDA else 'cpu'
-
-
-def evaluate(model, loader, criterion, desc=None):
+def evaluate(model, loader, criterion, device, desc=None):
     model.eval()
     losses = []
     accuracies = []
     with torch.no_grad():
         for points, labels in tqdm(loader, desc=desc, leave=False):
+            points = points.to(device)
+            labels = labels.to(device)
             pred = model(points)
             loss = criterion(pred.squeeze(), labels.squeeze())
             pred_labels = torch.argmax(pred[0], 1)
@@ -38,7 +36,7 @@ def train(args):
     train_path = args.dataset / args.train_dir
     val_path = args.dataset / args.val_dir
     logs_dir = args.logs_dir / args.name
-    logs_dir.mkdir(exist_ok=True)
+    logs_dir.mkdir(exist_ok=True, parents=True)
 
     # determine number of classes
     try:
@@ -50,12 +48,21 @@ def train(args):
 
     train_loader = data_loader(
         train_path,
-        device=args.gpu,
         train=True,
         split='training',
-        num_workers=args.num_workers
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
+        pin_memory=True
     )
-    val_loader = data_loader(train_path, device=args.gpu, train=True, split='validation', batch_size=args.batch_size)
+    val_loader = data_loader(
+        train_path,
+        train=True,
+        split='validation',
+        batch_size=1,
+        num_workers=args.num_workers,
+        pin_memory=True
+    )
+
     d_in = 6 # next(iter(train_loader))[0].size(-1)
 
     model = RandLANet(
@@ -91,6 +98,8 @@ def train(args):
             losses = []
             accuracies = []
             for points, labels in tqdm(train_loader, desc=f'[Epoch {epoch:d}/{args.epochs:d}]\tTraining', leave=False):
+                points = points.to(args.gpu)
+                labels = labels.to(args.gpu)
                 optimizer.zero_grad()
                 pred = model(points)
                 loss = criterion(pred.squeeze(), labels.squeeze())
@@ -105,7 +114,13 @@ def train(args):
                 correct = (pred_labels == labels[0]).float().sum()
                 accuracies.append((correct/points.shape[1]).cpu().item())
 
-            val_loss, val_acc = evaluate(model, val_loader, criterion, desc=f'[Epoch {epoch:d}/{args.epochs:d}]\tValidation')
+            val_loss, val_acc = evaluate(
+                model,
+                val_loader,
+                criterion,
+                args.gpu,
+                desc=f'[Epoch {epoch:d}/{args.epochs:d}]\tValidation'
+            )
 
             loss_dic = {
                 'Training loss':    np.mean(losses),
@@ -188,7 +203,7 @@ if __name__ == '__main__':
     misc.add_argument('--name', type=str, help='name of the experiment',
                         default=None)
     misc.add_argument('--num_workers', type=int, help='number of threads for loading data',
-                        default=0)
+                        default=8)
     misc.add_argument('--save_freq', type=int, help='frequency of saving checkpoints',
                         default=10)
 

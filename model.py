@@ -97,7 +97,6 @@ class LocalSpatialEncoding(nn.Module):
             extended_coords - neighbors,
             dist.unsqueeze(-3)
         ), dim=-3).to(self.device)
-
         return torch.cat((
             self.mlp(concat),
             features.expand(B, -1, N, K)
@@ -315,15 +314,13 @@ class RandLANet(nn.Module):
 
 if __name__ == '__main__':
     import time
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
     d_in = 7
-    cloud = 1000*torch.randn(1, 2**16, d_in)
-    model = RandLANet(d_in, 6, 16, 4)
+    cloud = 1000*torch.randn(1, 2**16, d_in).to(device)
+    model = RandLANet(d_in, 6, 16, 4, device)
     # model.load_state_dict(torch.load('checkpoints/checkpoint_100.pth'))
     model.eval()
-
-    if torch.cuda.is_available():
-        model = model.cuda()
-        cloud = cloud.cuda()
 
     t0 = time.time()
     pred = model(cloud)

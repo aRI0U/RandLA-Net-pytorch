@@ -1,35 +1,28 @@
-import glob, pickle, time, warnings
+import pickle, time, warnings
 import numpy as np
-from os.path import join
 
 import torch
-from torch.utils.data import Dataset, DataLoader, Sampler, BatchSampler
+from torch.utils.data import Dataset, IterableDataset, DataLoader, Sampler, BatchSampler
 
 from config import cfg
 from utils.ply import read_ply
 from utils.tools import DataProcessing as DP
 
 class PointCloudsDataset(Dataset):
-    def __init__(self, dir, device, train=False, data_type='npy'):
-        self.paths = list(dir.glob(f'*.{data_type}'))
+    def __init__(self, dir, device, train=False):
+        self.paths = list(dir.glob(f'*.npy'))
         self.size = len(self.paths)
         self.train = train
         self.device = device
-        self.data_type = data_type
 
     def __getitem__(self, idx):
         idx = idx % self.size
         path = self.paths[idx]
 
-        if self.data_type=='npy':
-            points, labels = self.load_npy(path, keep_zeros=not self.train)
-        elif self.data_type=='ply':
-            points, labels = self.load_ply(path, keep_zeros=not self.train)
-        else :
-            raise 'unknown data type, compatible types are "npy" (preferred) and "ply" point clouds'
+        points, labels = self.load_npy(path, keep_zeros=not self.train)
 
-        points_tensor = torch.from_numpy(points).float().to(self.device)
-        labels_tensor = torch.from_numpy(labels).long().to(self.device) - 1
+        points_tensor = torch.from_numpy(points).float()#.to(self.device)
+        labels_tensor = torch.from_numpy(labels).long()#.to(self.device)
 
         # print(points_tensor.dtype, labels_tensor.dtype)
         return points_tensor, labels_tensor
@@ -74,49 +67,11 @@ class PointCloudsDataset(Dataset):
 
         return points, labels
 
-    @staticmethod
-    def load_ply(path, keep_zeros=True):
-        r"""
-            load the point cloud and labels of the ply file located in path
-
-            Args:
-                path: str
-                    path of the point cloud
-                keep_zeros: bool (optional)
-                    keep unclassified points
-        """
-        cloud_ply = read_ply(path)
-        points = np.vstack((cloud_ply['x'], cloud_ply['y'], cloud_ply['z'])).T
-
-        labels = None
-        if not keep_zeros:
-            labels = cloud_ply['class']
-
-            # balance training set
-            points_list, labels_list = [], []
-            for i in range(1, len(np.unique(labels))):
-                try:
-                    idx = np.random.choice(len(labels[labels==i]), 8000)
-                    points_list.append(points[labels==i][idx])
-                    labels_list.append(labels[labels==i][idx])
-                except ValueError:
-                    continue
-
-            points = np.stack(points_list)
-            labels = np.stack(labels_list)
-            labeled = labels>0
-            points = points[labeled]
-            labels = labels[labeled]
-
-        return points, labels
-
-
 class CloudsDataset(Dataset):
-    def __init__(self, dir, device, train=False, data_type='npy'):
+    def __init__(self, dir, train=False, data_type='npy'):
         self.path = dir
         self.paths = list(dir.glob(f'*.{data_type}'))
         self.size = len(self.paths)
-        self.device = device
         self.train = train
         self.data_type = data_type
         self.input_trees = {'training': [], 'validation': []}
@@ -141,8 +96,8 @@ class CloudsDataset(Dataset):
                 cloud_split = 'training'
 
             # Name of the input files
-            kd_tree_file = join(self.path, '{:s}_KDTree.pkl'.format(cloud_name))
-            sub_npy_file = join(self.path, '{:s}.npy'.format(cloud_name))
+            kd_tree_file = self.path / '{:s}_KDTree.pkl'.format(cloud_name)
+            sub_npy_file = self.path / '{:s}.npy'.format(cloud_name)
 
             data = np.load(sub_npy_file, mmap_mode='r').T
             sub_colors = data[:,3:6]
@@ -153,13 +108,13 @@ class CloudsDataset(Dataset):
                 search_tree = pickle.load(f)
 
             # The points information is in tree.data
-            self.input_trees[cloud_split] += [search_tree]
-            self.input_colors[cloud_split] += [sub_colors]
-            self.input_labels[cloud_split] += [sub_labels]
-            self.input_names[cloud_split] += [cloud_name]
+            self.input_trees[cloud_split].append(search_tree)
+            self.input_colors[cloud_split].append(sub_colors)
+            self.input_labels[cloud_split].append(sub_labels)
+            self.input_names[cloud_split].append(cloud_name)
 
             size = sub_colors.shape[0] * 4 * 7
-            print('{:s} {:.1f} MB loaded in {:.1f}s'.format(kd_tree_file.split('/')[-1], size * 1e-6, time.time() - t0))
+            print('{:s} {:.1f} MB loaded in {:.1f}s'.format(kd_tree_file.name, size * 1e-6, time.time() - t0))
 
         print('\nPreparing reprojected indices for testing')
 
@@ -171,7 +126,7 @@ class CloudsDataset(Dataset):
 
             # Validation projection and labels
             if self.val_split in cloud_name:
-                proj_file = join(self.path, '{:s}_proj.pkl'.format(cloud_name))
+                proj_file = self.path / '{:s}_proj.pkl'.format(cloud_name)
                 with open(proj_file, 'rb') as f:
                     proj_idx, labels = pickle.load(f)
 
@@ -187,15 +142,19 @@ class CloudsDataset(Dataset):
         return self.size
 
 
-class active_learning_batch_sampler(BatchSampler):
+class active_learning_batch_sampler(IterableDataset):
 
-    def __init__(self, dataset, device, split='training'):
+    def __init__(self, dataset, split='training'):
         self.dataset = dataset
         self.batch_size = 6
         self.split = split
         self.possibility = {}
         self.min_possibility = {}
-        self.device = device
+
+        if split == 'training':
+            self.n_samples = 50 # cfg.train_steps * cfg.batch_size
+        else:
+            self.n_samples = 10 # cfg.val_steps * cfg.val_batch_size
 
         #Random initialisation for weights
         self.possibility[split] = []
@@ -206,6 +165,9 @@ class active_learning_batch_sampler(BatchSampler):
 
     def __iter__(self):
         return self.spatially_regular_gen()
+
+    def __len__(self):
+        return self.n_samples # not equal to the actual size of the dataset, but enable nice progress bars
 
     def spatially_regular_gen(self):
 
@@ -254,25 +216,24 @@ class active_learning_batch_sampler(BatchSampler):
                 queried_pc_xyz, queried_pc_colors, queried_idx, queried_pc_labels = \
                     DP.data_aug(queried_pc_xyz, queried_pc_colors, queried_pc_labels, queried_idx, cfg.num_points)
 
-            queried_pc_xyz = torch.from_numpy(queried_pc_xyz.astype(np.float32)).to(self.device)
-            queried_pc_colors = torch.from_numpy(queried_pc_colors.astype(np.float32)).to(self.device)
-            queried_pc_labels = torch.from_numpy(queried_pc_labels.astype(np.float32)).to(self.device)
-            queried_idx = torch.from_numpy(queried_idx.astype(np.float32)).to(self.device)
-            cloud_idx = torch.from_numpy(np.array([cloud_idx], dtype=np.int32).astype(np.float32)).to(self.device)
+            queried_pc_xyz = torch.from_numpy(queried_pc_xyz.astype(np.float32))
+            queried_pc_colors = torch.from_numpy(queried_pc_colors.astype(np.float32))
+            queried_pc_labels = torch.from_numpy(queried_pc_labels.astype(np.float32))
+            queried_idx = torch.from_numpy(queried_idx.astype(np.float32))
+            cloud_idx = torch.from_numpy(np.array([cloud_idx], dtype=np.int32).astype(np.float32))
 
             points = torch.cat( (queried_pc_xyz, queried_pc_colors), 1)
             # print('time in seconds : ', time.time() - t0)
+            yield points, queried_pc_labels.long()
 
-            yield ( torch.reshape(points, (1, cfg.num_points, 6)),  torch.reshape(queried_pc_labels, (1, cfg.num_points)).long())
+#def data_loader(dir, device, train=False, split='training', **kwargs):
+    #dataset = PointCloudsDataset(dir, device, train)
+    #return DataLoader(dataset, **kwargs)
 
-# def data_loader(dir, device, train=False, split='training', **kwargs):
-#     dataset = PointCloudsDataset(dir, device, train)
-#     return DataLoader(dataset, **kwargs)
-
-def data_loader(dir,  device, train=False, split='training', **kwargs):
-    dataset = CloudsDataset(dir, device, train)
-    batch_sampler = active_learning_batch_sampler(dataset, device, split=split)
-    return batch_sampler
+def data_loader(dir, train=False, split='training', **kwargs):
+    dataset = CloudsDataset(dir, train)
+    batch_sampler = active_learning_batch_sampler(dataset, split=split)
+    return DataLoader(batch_sampler, **kwargs)
 
 if __name__ == '__main__':
     dataset = CloudsDataset('datasets/s3dis/subsampled/train')
