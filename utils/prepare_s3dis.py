@@ -2,6 +2,7 @@ from collections import defaultdict
 import json
 import numpy as np
 from pathlib import Path
+import warnings
 
 ROOT_PATH = (Path(__file__) / '..' / '..').resolve()
 DATASET_PATH = ROOT_PATH / 'datasets' / 's3dis'
@@ -25,6 +26,9 @@ else:
 for area_number in range(1,7):
     print(f'Reencoding point clouds of area {area_number:d}')
     dir = RAW_PATH / f'Area_{area_number:d}'
+    if not dir.exists():
+        warnings.warn(f'Area {area_number:d} not found')
+        continue
     for pc_path in sorted(list(dir.iterdir())):
         if not pc_path.is_dir:
             continue
