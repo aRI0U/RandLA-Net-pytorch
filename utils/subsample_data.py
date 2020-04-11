@@ -6,17 +6,18 @@ from pathlib import Path
 from sklearn.neighbors import KDTree
 import pickle
 
+from config import cfg
 from tools import DataProcessing as DP
 import cpp_wrappers.cpp_subsampling.grid_subsampling as cpp_subsampling
 
 ROOT_PATH = (Path(__file__)  / '..' / '..').resolve()
-DATASET_PATH = ROOT_PATH / 'datasets' / 's3dis'
+DATASET_PATH = ROOT_PATH / 'datasets' / 's3dis' / 'extracted'
 NEW_PATH = DATASET_PATH / 'reprocessed'
 LABELS_PATH = DATASET_PATH / 'classes.json'
 TRAIN_PATH = 'train'
 TEST_PATH = 'test'
 VAL_PATH = 'val'
-sub_grid_size = 0.04
+sub_grid_size = cfg.sub_grid_size
 
 for folder in [TRAIN_PATH, TEST_PATH, VAL_PATH]:
     (NEW_PATH / folder).mkdir(parents=True, exist_ok=True)

@@ -5,7 +5,7 @@ from os.path import join
 import torch
 from torch.utils.data import Dataset, DataLoader, Sampler, BatchSampler
 
-from config import cfg
+from utils.config import cfg
 from utils.ply import read_ply
 from utils.tools import DataProcessing as DP
 
@@ -213,57 +213,82 @@ class active_learning_batch_sampler(BatchSampler):
             num_per_epoch = 50 #cfg.train_steps * cfg.batch_size
         elif self.split == 'validation':
             num_per_epoch = 10 #cfg.val_steps * cfg.val_batch_size
-        # Generator loop
-        for i in range(num_per_epoch):  # num_per_epoch
-            # t0 = time.time()
 
-            # Choose a random cloud
-            cloud_idx = int(np.argmin(self.min_possibility[self.split]))
+        # Choosing the least known point as center of a new cloud each time.
+        if cfg.sampling_type=='active_learning':
+            # Generator loop
 
-            # choose the point with the minimum of possibility as query point
-            point_ind = np.argmin(self.possibility[self.split][cloud_idx])
+            for i in range(num_per_epoch):  # num_per_epoch
+                # t0 = time.time()
 
-            # Get points from tree structure
-            points = np.array(self.dataset.input_trees[self.split][cloud_idx].data, copy=False)
+                # Choose a random cloud
+                cloud_idx = int(np.argmin(self.min_possibility[self.split]))
 
-            # Center point of input region
-            center_point = points[point_ind, :].reshape(1, -1)
+                # choose the point with the minimum of possibility as query point
+                point_ind = np.argmin(self.possibility[self.split][cloud_idx])
 
-            # Add noise to the center point
-            noise = np.random.normal(scale=3.5 / 10, size=center_point.shape)
-            pick_point = center_point + noise.astype(center_point.dtype)
+                # Get points from tree structure
+                points = np.array(self.dataset.input_trees[self.split][cloud_idx].data, copy=False)
 
-            if len(points) < cfg.num_points:
-                queried_idx = self.dataset.input_trees[self.split][cloud_idx].query(pick_point, k=len(points))[1][0]
-            else:
-                queried_idx = self.dataset.input_trees[self.split][cloud_idx].query(pick_point, k=cfg.num_points)[1][0]
+                # Center point of input region
+                center_point = points[point_ind, :].reshape(1, -1)
 
-            queried_idx = DP.shuffle_idx(queried_idx)
-            # Collect points and colors
-            queried_pc_xyz = points[queried_idx]
-            queried_pc_xyz = queried_pc_xyz - pick_point
-            queried_pc_colors = self.dataset.input_colors[self.split][cloud_idx][queried_idx]
-            queried_pc_labels = self.dataset.input_labels[self.split][cloud_idx][queried_idx]
+                # Add noise to the center point
+                noise = np.random.normal(scale=3.5 / 10, size=center_point.shape)
+                pick_point = center_point + noise.astype(center_point.dtype)
 
-            dists = np.sum(np.square((points[queried_idx] - pick_point).astype(np.float32)), axis=1)
-            delta = np.square(1 - dists / np.max(dists))
-            self.possibility[self.split][cloud_idx][queried_idx] += delta
-            self.min_possibility[self.split][cloud_idx] = float(np.min(self.possibility[self.split][cloud_idx]))
+                if len(points) < cfg.num_points:
+                    queried_idx = self.dataset.input_trees[self.split][cloud_idx].query(pick_point, k=len(points))[1][0]
+                else:
+                    queried_idx = self.dataset.input_trees[self.split][cloud_idx].query(pick_point, k=cfg.num_points)[1][0]
 
-            if len(points) < cfg.num_points:
-                queried_pc_xyz, queried_pc_colors, queried_idx, queried_pc_labels = \
-                    DP.data_aug(queried_pc_xyz, queried_pc_colors, queried_pc_labels, queried_idx, cfg.num_points)
+                queried_idx = DP.shuffle_idx(queried_idx)
+                # Collect points and colors
+                queried_pc_xyz = points[queried_idx]
+                queried_pc_xyz = queried_pc_xyz - pick_point
+                queried_pc_colors = self.dataset.input_colors[self.split][cloud_idx][queried_idx]
+                queried_pc_labels = self.dataset.input_labels[self.split][cloud_idx][queried_idx]
 
-            queried_pc_xyz = torch.from_numpy(queried_pc_xyz.astype(np.float32)).to(self.device)
-            queried_pc_colors = torch.from_numpy(queried_pc_colors.astype(np.float32)).to(self.device)
-            queried_pc_labels = torch.from_numpy(queried_pc_labels.astype(np.float32)).to(self.device)
-            queried_idx = torch.from_numpy(queried_idx.astype(np.float32)).to(self.device)
-            cloud_idx = torch.from_numpy(np.array([cloud_idx], dtype=np.int32).astype(np.float32)).to(self.device)
+                dists = np.sum(np.square((points[queried_idx] - pick_point).astype(np.float32)), axis=1)
+                delta = np.square(1 - dists / np.max(dists))
+                self.possibility[self.split][cloud_idx][queried_idx] += delta
+                self.min_possibility[self.split][cloud_idx] = float(np.min(self.possibility[self.split][cloud_idx]))
 
-            points = torch.cat( (queried_pc_xyz, queried_pc_colors), 1)
-            # print('time in seconds : ', time.time() - t0)
+                if len(points) < cfg.num_points:
+                    queried_pc_xyz, queried_pc_colors, queried_idx, queried_pc_labels = \
+                        DP.data_aug(queried_pc_xyz, queried_pc_colors, queried_pc_labels, queried_idx, cfg.num_points)
 
-            yield ( torch.reshape(points, (1, cfg.num_points, 6)),  torch.reshape(queried_pc_labels, (1, cfg.num_points)).long())
+                queried_pc_xyz = torch.from_numpy(queried_pc_xyz.astype(np.float32)).to(self.device)
+                queried_pc_colors = torch.from_numpy(queried_pc_colors.astype(np.float32)).to(self.device)
+                queried_pc_labels = torch.from_numpy(queried_pc_labels.astype(np.float32)).to(self.device)
+                queried_idx = torch.from_numpy(queried_idx.astype(np.float32)).to(self.device)
+                cloud_idx = torch.from_numpy(np.array([cloud_idx], dtype=np.int32).astype(np.float32)).to(self.device)
+
+                points = torch.cat( (queried_pc_xyz, queried_pc_colors), 1)
+                # print('time in seconds : ', time.time() - t0)
+
+                yield ( torch.reshape(points, (1, cfg.num_points, 6)),  torch.reshape(queried_pc_labels, (1, cfg.num_points)).long())
+
+            # Simpel random choice of cloud and points in it
+        elif cfg.sampling_type=='random':
+
+            for i in range(num_per_epoch):
+                cloud_idx = np.random.choice(len(self.min_possibility[self.split]), 1)[0]
+                points = np.array(self.dataset.input_trees[self.split][cloud_idx].data, copy=False)
+                queried_idx = np.random.choice(len(self.dataset.input_trees[self.split][cloud_idx].data), cfg.num_points)
+                queried_pc_xyz = points[queried_idx]
+                queried_pc_colors = self.dataset.input_colors[self.split][cloud_idx][queried_idx]
+                queried_pc_labels = self.dataset.input_labels[self.split][cloud_idx][queried_idx]
+
+                queried_pc_xyz = torch.from_numpy(queried_pc_xyz.astype(np.float32)).to(self.device)
+                queried_pc_colors = torch.from_numpy(queried_pc_colors.astype(np.float32)).to(self.device)
+                queried_pc_labels = torch.from_numpy(queried_pc_labels.astype(np.float32)).to(self.device)
+                queried_idx = torch.from_numpy(queried_idx.astype(np.float32)).to(self.device)
+                cloud_idx = torch.from_numpy(np.array([cloud_idx], dtype=np.int32).astype(np.float32)).to(self.device)
+
+                points = torch.cat( (queried_pc_xyz, queried_pc_colors), 1)
+
+                yield ( torch.reshape(points, (1, cfg.num_points, 6)),  torch.reshape(queried_pc_labels, (1, cfg.num_points)).long())
 
 # def data_loader(dir, device, train=False, split='training', **kwargs):
 #     dataset = PointCloudsDataset(dir, device, train)
@@ -271,8 +296,9 @@ class active_learning_batch_sampler(BatchSampler):
 
 def data_loader(dir,  device, train=False, split='training', **kwargs):
     dataset = CloudsDataset(dir, device, train)
-    batch_sampler = active_learning_batch_sampler(dataset, device, split=split)
-    return batch_sampler
+    val_batch_sampler = active_learning_batch_sampler(dataset, device, split='validation')
+    train_batch_sampler = active_learning_batch_sampler(dataset, device, split='training')
+    return val_batch_sampler, train_batch_sampler
 
 if __name__ == '__main__':
     dataset = CloudsDataset('datasets/s3dis/subsampled/train')

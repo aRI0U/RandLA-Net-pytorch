@@ -13,7 +13,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from data import data_loader
 from model import RandLANet
-from config import cfg
+from utils.config import cfg
 
 USE_CUDA = torch.cuda.is_available()
 device = 'cuda' if USE_CUDA else 'cpu'
@@ -48,14 +48,14 @@ def train(args):
     except FileNotFoundError:
         num_classes = int(input("Number of distinct classes in the dataset: "))
 
-    train_loader = data_loader(
+    val_loader, train_loader = data_loader(
         train_path,
         device=args.gpu,
         train=True,
         split='training',
         num_workers=args.num_workers
     )
-    val_loader = data_loader(train_path, device=args.gpu, train=True, split='validation', batch_size=args.batch_size)
+    # val_loader = data_loader(train_path, device=args.gpu, train=True, split='validation', batch_size=args.batch_size)
     d_in = 6 # next(iter(train_loader))[0].size(-1)
 
     model = RandLANet(
@@ -156,7 +156,7 @@ if __name__ == '__main__':
     misc = parser.add_argument_group('Miscellaneous')
 
     base.add_argument('--dataset', type=Path, help='location of the dataset',
-                        default='datasets/s3dis')
+                        default='datasets/s3dis/extracted/reprocessed/')
 
     expr.add_argument('--epochs', type=int, help='number of epochs',
                         default=200)
