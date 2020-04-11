@@ -58,14 +58,14 @@ def evaluate(model, loader, criterion, device, desc=None):
     losses = []
     accuracies = []
     with torch.no_grad():
-        for points, labels in tqdm(loader, desc=desc, leave=False, ncols=100):
+        for points, labels in tqdm(loader, desc=desc, leave=False, ncols=80):
             points = points.to(device)
             labels = labels.to(device)
             scores = model(points)
             loss = criterion(scores, labels)
             accuracies.append(accuracy(scores, labels))
             losses.append(loss.cpu().item())
-    return np.mean(losses), np.mean(np.array(accuracies), axis=0)
+    return np.mean(losses), np.nanmean(np.array(accuracies), axis=0)
 
 
 def train(args):
@@ -82,8 +82,9 @@ def train(args):
     except FileNotFoundError:
         num_classes = int(input("Number of distinct classes in the dataset: "))
 
-    val_loader, train_loader = data_loaders(
-        train_path,
+    train_loader, val_loader = data_loaders(
+        args.dataset,
+        args.dataset_sampling,
         batch_size=args.batch_size,
         num_workers=args.num_workers,
         pin_memory=True
@@ -101,15 +102,21 @@ def train(args):
 
     print('Computing weights...', end='\t')
     samples_per_class = np.array(cfg.class_weights)
-    weight = samples_per_class / float(sum(samples_per_class))
-    class_weights = 1 / (weight + 0.02)
+    # weight = samples_per_class / float(sum(samples_per_class))
+    # class_weights = 1 / (weight + 0.02)
     # effective = 1.0 - np.power(0.99, samples_per_class)
     # class_weights = (1 - 0.99) / effective
     # class_weights = class_weights / (np.sum(class_weights) * num_classes)
     # class_weights = class_weights / float(sum(class_weights))
-    weights = torch.tensor(class_weights.astype(np.float32)).to(args.gpu)
+    # weights = torch.tensor(class_weights).float().to(args.gpu)
+    n_samples = torch.tensor(cfg.class_weights, dtype=torch.float, device=args.gpu, requires_grad=False)
+    ratio_samples = n_samples / n_samples.sum()
+    weights = ratio_samples
+    #weights = F.softmin(n_samples)
+    # weights = (1/ratio_samples) / (1/ratio_samples).sum()
+
     print('Done.')
-    print('Weights : ', weights)
+    print('Weights:', weights)
     criterion = nn.CrossEntropyLoss(weight=weights)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.adam_lr)
@@ -133,13 +140,13 @@ def train(args):
             losses = []
             accuracies = []
             class_accuracies = []
-            for points, labels in tqdm(train_loader, desc=f'[Epoch {epoch:d}/{args.epochs:d}]\tTraining', leave=False, ncols=100):
+            for points, labels in tqdm(train_loader, desc=f'[Epoch {epoch:d}/{args.epochs:d}]\tTraining', leave=False, ncols=80):
                 points = points.to(args.gpu)
                 labels = labels.to(args.gpu)
                 optimizer.zero_grad()
-                
+
                 scores = model(points)
-                # loss = criterion(pred.squeeze(), labels.squeeze())
+
                 logp = torch.distributions.utils.probs_to_logits(scores, is_binary=False)
                 loss = criterion(logp, labels)
                 # logpy = torch.gather(logp, 1, labels)
@@ -154,7 +161,7 @@ def train(args):
 
             scheduler.step()
 
-            accs = np.mean(np.array(accuracies), axis=0)
+            accs = np.nanmean(np.array(accuracies), axis=0)
 
             val_loss, val_accs = evaluate(
                 model,
@@ -189,8 +196,8 @@ def train(args):
 
             d = t1 - t0
             print('\tTime elapsed:', '{:.0f} s'.format(d) if d < 60 else '{:.0f} min {:.0f} s'.format(*divmod(d, 60)))
-            print('train acc:', *[f'{acc:.3f}' if not np.isnan(acc) else '0.000' for acc in accs])
-            print('val acc:', *[f'{acc:.3f}' if not np.isnan(acc) else '0.000' for acc in val_accs])
+            print('train acc:', *[f'{acc:.3f}' for acc in accs], sep='   ')
+            print('val acc:  ', *[f'{acc:.3f}' for acc in val_accs], sep='   ')
             writer.add_scalars('Loss', loss_dict, epoch)
             writer.add_scalars('Accuracy', accuracy_dict, epoch)
 
@@ -202,7 +209,7 @@ def train(args):
                         optimizer_state_dict=optimizer.state_dict(),
                         scheduler_state_dict=scheduler.state_dict()
                     ),
-                    args.logs_dir / args.name / f'checkpoint_{epoch:d}.pth'
+                    args.logs_dir / args.name / f'checkpoint_{epoch:02d}.pth'
                 )
 
 
@@ -223,7 +230,7 @@ if __name__ == '__main__':
                         default='datasets/s3dis/subsampled')
 
     expr.add_argument('--epochs', type=int, help='number of epochs',
-                        default=200)
+                        default=50)
     expr.add_argument('--load', type=str, help='model to load',
                         default='')
 
@@ -233,6 +240,8 @@ if __name__ == '__main__':
                         default=1)
     param.add_argument('--decimation', type=int, help='ratio the point cloud is divided by at each layer',
                         default=4)
+    param.add_argument('--dataset_sampling', type=str, help='how dataset is sampled',
+                        default='active_learning', choices=['active_learning', 'naive'])
     param.add_argument('--neighbors', type=int, help='number of neighbors considered by k-NN',
                         default=16)
     param.add_argument('--scheduler_gamma', type=float, help='gamma of the learning rate scheduler',
@@ -268,7 +277,10 @@ if __name__ == '__main__':
         args.gpu = torch.device('cpu')
 
     if args.name is None:
-        args.name = datetime.now().strftime('%Y-%m-%d_%H:%M')
+        if args.load:
+            args.name = args.load
+        else:
+            args.name = datetime.now().strftime('%Y-%m-%d_%H:%M')
 
     t0 = time.time()
     train(args)

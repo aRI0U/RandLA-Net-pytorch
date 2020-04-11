@@ -8,28 +8,24 @@ from utils.config import cfg
 from utils.tools import DataProcessing as DP
 
 class PointCloudsDataset(Dataset):
-    def __init__(self, dir, train=False):
+    def __init__(self, dir, labels_available=True):
         self.paths = list(dir.glob(f'*.npy'))
-        self.size = len(self.paths)
-        self.train = train
+        self.labels_available = labels_available
 
     def __getitem__(self, idx):
-        idx = idx % self.size
         path = self.paths[idx]
 
-        points, labels = self.load_npy(path, keep_zeros=not self.train)
+        points, labels = self.load_npy(path)
 
         points_tensor = torch.from_numpy(points).float()
         labels_tensor = torch.from_numpy(labels).long()
 
-        # print(points_tensor.dtype, labels_tensor.dtype)
         return points_tensor, labels_tensor
 
     def __len__(self):
-        return self.size
+        return len(self.paths)
 
-    @staticmethod
-    def load_npy(path, keep_zeros=True):
+    def load_npy(self, path):
         r"""
             load the point cloud and labels of the npy file located in path
 
@@ -39,24 +35,22 @@ class PointCloudsDataset(Dataset):
                 keep_zeros: bool (optional)
                     keep unclassified points
         """
-        cloud_npy = np.load(path, mmap_mode='r')
-        # print(cloud_npy.shape)
-        points = cloud_npy[:, :6]
+        cloud_npy = np.load(path, mmap_mode='r').T
+        points = cloud_npy[:,:-1] if self.labels_available else points
 
-        labels = np.zeros(1)
-        if not keep_zeros:
+        if self.labels_available:
             labels = cloud_npy[:,-1]
 
             # balance training set
             points_list, labels_list = [], []
-            for i in range(1, len(np.unique(labels))):
+            for i in range(len(np.unique(labels))):
                 try:
                     idx = np.random.choice(len(labels[labels==i]), 8000)
                     points_list.append(points[labels==i][idx])
                     labels_list.append(labels[labels==i][idx])
                 except ValueError:
                     continue
-            if points_list :
+            if points_list:
                 points = np.stack(points_list)
                 labels = np.stack(labels_list)
                 labeled = labels>0
@@ -66,19 +60,18 @@ class PointCloudsDataset(Dataset):
         return points, labels
 
 class CloudsDataset(Dataset):
-    def __init__(self, dir, train=False, data_type='npy'):
+    def __init__(self, dir, data_type='npy'):
         self.path = dir
         self.paths = list(dir.glob(f'*.{data_type}'))
         self.size = len(self.paths)
-        self.train = train
         self.data_type = data_type
         self.input_trees = {'training': [], 'validation': []}
         self.input_colors = {'training': [], 'validation': []}
         self.input_labels = {'training': [], 'validation': []}
         self.input_names = {'training': [], 'validation': []}
-        self.val_split = '1_'
         self.val_proj = []
         self.val_labels = []
+        self.val_split = '1_'
 
         self.load_data()
         print('Size of training : ', len(self.input_colors['training']))
@@ -140,7 +133,7 @@ class CloudsDataset(Dataset):
         return self.size
 
 
-class active_learning_batch_sampler(IterableDataset):
+class ActiveLearningSampler(IterableDataset):
 
     def __init__(self, dataset, split='training'):
         self.dataset = dataset
@@ -211,9 +204,7 @@ class active_learning_batch_sampler(IterableDataset):
                     queried_pc_xyz, queried_pc_colors, queried_idx, queried_pc_labels = \
                         DP.data_aug(queried_pc_xyz, queried_pc_colors, queried_pc_labels, queried_idx, cfg.num_points)
 
-                # yield ( torch.reshape(points, (1, cfg.num_points, 6)),  torch.reshape(queried_pc_labels, (1, cfg.num_points)).long())
-
-            # Simpel random choice of cloud and points in it
+            # Simple random choice of cloud and points in it
             elif cfg.sampling_type=='random':
 
                 cloud_idx = np.random.choice(len(self.min_possibility[self.split]), 1)[0]
@@ -233,19 +224,24 @@ class active_learning_batch_sampler(IterableDataset):
 
             yield points, queried_pc_labels
 
-# def data_loader(dir, train=False, split='training', **kwargs):
-#     dataset = PointCloudsDataset(dir, train)
-#     return DataLoader(dataset, **kwargs)
 
-def data_loaders(dir, **kwargs):
-    dataset = CloudsDataset(dir)
-    val_batch_sampler = active_learning_batch_sampler(dataset, split='validation')
-    train_batch_sampler = active_learning_batch_sampler(dataset, split='training')
-    return DataLoader(train_batch_sampler, **kwargs), DataLoader(val_batch_sampler, **kwargs)
+def data_loaders(dir, sampling_method='active_learning', **kwargs):
+    if sampling_method == 'active_learning':
+        dataset = CloudsDataset(dir / 'train')
+        val_sampler = ActiveLearningSampler(dataset, split='validation')
+        train_sampler = ActiveLearningSampler(dataset, split='training')
+        return DataLoader(train_sampler, **kwargs), DataLoader(val_sampler, **kwargs)
+
+    if sampling_method == 'naive':
+        train_dataset = PointCloudsDataset(dir / 'train')
+        val_dataset = PointCloudsDataset(dir / 'val')
+        return DataLoader(train_dataset, shuffle=True, **kwargs), DataLoader(val_dataset, **kwargs)
+
+    raise ValueError(f"Dataset sampling method '{sampling_method}' does not exist.")
 
 if __name__ == '__main__':
     dataset = CloudsDataset('datasets/s3dis/subsampled/train')
-    batch_sampler = active_learning_batch_sampler(dataset)
+    batch_sampler = ActiveLearningSampler(dataset)
     for data in batch_sampler:
         xyz, colors, labels, idx, cloud_idx = data
         print('Number of points:', len(xyz))

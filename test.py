@@ -5,18 +5,18 @@ import time
 import torch
 import torch.nn as nn
 
-from data import data_loader
+from data import data_loaders
 from model import RandLANet
 from utils.ply import read_ply, write_ply
 
 t0 = time.time()
 
-path = Path('datasets') / 's3dis' / 'reprocessed' / 'test'
+path = Path('datasets') / 's3dis' / 'subsampled' / 'test'
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 print('Loading data...')
-loader = data_loader(path, train=False)
+loader, _ = data_loaders(path)
 
 print('Loading model...')
 
@@ -24,7 +24,7 @@ d_in = 6
 num_classes = 14
 
 model = RandLANet(d_in, num_classes, 16, 4, device)
-model.load_state_dict(torch.load('runs/2020-04-11_04:16/checkpoint_1.pth')['model_state_dict'])
+model.load_state_dict(torch.load('runs/2020-04-11_17:03/checkpoint_10.pth')['model_state_dict'])
 model.eval()
 
 points, labels = next(iter(loader))

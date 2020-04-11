@@ -7,7 +7,7 @@ class cfg:
 
     batch_size = 1  # batch_size during training
     val_batch_size = 1  # batch_size during validation and test
-    train_steps = 500  # Number of steps per epochs
+    train_steps = 50  # Number of steps per epochs
     val_steps = 100  # Number of validation steps per epoch
 
     sub_sampling_ratio = [4, 4, 4, 4, 2]  # sampling ratio of random sampling at each layer
