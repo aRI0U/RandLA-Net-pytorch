@@ -16,7 +16,7 @@ path = Path('datasets') / 's3dis' / 'reprocessed' / 'test'
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 print('Loading data...')
-loader = data_loader(path, device, train=False)
+loader = data_loader(path, train=False)
 
 print('Loading model...')
 
@@ -24,17 +24,20 @@ d_in = 6
 num_classes = 14
 
 model = RandLANet(d_in, num_classes, 16, 4, device)
-model.load_state_dict(torch.load('runs/2020-04-10_20:15/checkpoint_20.pth')['model_state_dict'])
+model.load_state_dict(torch.load('runs/2020-04-11_04:16/checkpoint_1.pth')['model_state_dict'])
 model.eval()
 
-points, _ = next(iter(loader))
+points, labels = next(iter(loader))
 
 print('Predicting labels...')
 with torch.no_grad():
-    print(points.shape)
+    points = points.to(device)
+    labels = labels.to(device)
     scores = model(points)
-    print(scores.shape)
-    predictions = (torch.max(scores, dim=-1).indices).cpu().numpy().astype(np.int32)
+    predictions = torch.max(scores, dim=-2).indices
+    accuracy = (predictions == labels).float().mean() # TODO: compute mIoU usw.
+    print('Accuracy:', accuracy.item())
+    predictions = predictions.cpu().numpy()
 
 print('Writing results...')
 np.savetxt('output.txt', predictions, fmt='%d', delimiter='\n')

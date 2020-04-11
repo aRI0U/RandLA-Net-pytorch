@@ -241,7 +241,7 @@ class RandLANet(nn.Module):
 
             Returns
             -------
-            torch.Tensor, shape (B, N, num_classes)
+            torch.Tensor, shape (B, num_classes, N)
                 segmentation scores for each point
         """
         N = input.size(1)

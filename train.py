@@ -9,6 +9,7 @@ import warnings
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
 
 from data import data_loader
@@ -65,7 +66,7 @@ def train(args):
         pin_memory=True
     )
 
-    d_in = 6 # next(iter(train_loader))[0].size(-1)
+    d_in = next(iter(train_loader))[0].size(-1)
 
     model = RandLANet(
         d_in,
@@ -76,8 +77,9 @@ def train(args):
     )
 
     class_weights = np.array(cfg.class_weights)
-    class_weights = torch.tensor((class_weights / float(sum(class_weights))).astype(np.float32)).to(args.gpu)
-    criterion = nn.CrossEntropyLoss(weight=class_weights)
+    #class_weights = torch.tensor((class_weights / np.sum(class_weights))).float().to(args.gpu)
+    class_weights = F.softmax(torch.from_numpy(class_weights).float(), dim=0).to(args.gpu)
+    criterion = nn.CrossEntropyLoss(weight=torch.clamp(1/class_weights, 1, 1e6))
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.adam_lr)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, args.scheduler_gamma)
@@ -109,10 +111,11 @@ def train(args):
                 loss.backward()
 
                 optimizer.step()
-                scheduler.step()
 
                 losses.append(loss.cpu().item())
                 accuracies.append(accuracy(scores, labels).cpu().item())
+
+            scheduler.step()
 
             val_loss, val_acc = evaluate(
                 model,
@@ -203,9 +206,9 @@ if __name__ == '__main__':
     misc.add_argument('--name', type=str, help='name of the experiment',
                         default=None)
     misc.add_argument('--num_workers', type=int, help='number of threads for loading data',
-                        default=8)
+                        default=0)
     misc.add_argument('--save_freq', type=int, help='frequency of saving checkpoints',
-                        default=10)
+                        default=1)
 
     args = parser.parse_args()
 

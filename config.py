@@ -5,8 +5,8 @@ class cfg:
     num_classes = 14  # Number of valid classes
     sub_grid_size = 0.04  # preprocess_parameter
 
-    batch_size = 8  # batch_size during training
-    val_batch_size = 24  # batch_size during validation and test
+    batch_size = 1  # batch_size during training
+    val_batch_size = 1  # batch_size during validation and test
     train_steps = 500  # Number of steps per epochs
     val_steps = 100  # Number of validation steps per epoch
 

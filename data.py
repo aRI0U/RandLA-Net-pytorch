@@ -152,9 +152,9 @@ class active_learning_batch_sampler(IterableDataset):
         self.min_possibility = {}
 
         if split == 'training':
-            self.n_samples = 50 # cfg.train_steps * cfg.batch_size
+            self.n_samples = cfg.train_steps
         else:
-            self.n_samples = 10 # cfg.val_steps * cfg.val_batch_size
+            self.n_samples = cfg.val_steps
 
         #Random initialisation for weights
         self.possibility[split] = []
@@ -172,9 +172,9 @@ class active_learning_batch_sampler(IterableDataset):
     def spatially_regular_gen(self):
 
         if self.split == 'training':
-            num_per_epoch = 50 #cfg.train_steps * cfg.batch_size
+            num_per_epoch = self.n_samples
         elif self.split == 'validation':
-            num_per_epoch = 10 #cfg.val_steps * cfg.val_batch_size
+            num_per_epoch = self.n_samples
         # Generator loop
         for i in range(num_per_epoch):  # num_per_epoch
             # t0 = time.time()
@@ -239,11 +239,11 @@ if __name__ == '__main__':
     dataset = CloudsDataset('datasets/s3dis/subsampled/train')
     batch_sampler = active_learning_batch_sampler(dataset)
     for data in batch_sampler:
-        xyz, colors, labbels, idx, cloud_idx = data
-        print('Nomber of points : ', len(xyz))
-        print('Point position : ', xyz[1])
-        print('Color : ', colors[1])
-        print('Label : ', labbels[1])
-        print('Indice of point : ', idx[1])
-        print('Cloud indice : ', cloud_idx)
+        xyz, colors, labels, idx, cloud_idx = data
+        print('Number of points:', len(xyz))
+        print('Point position:', xyz[1])
+        print('Color:', colors[1])
+        print('Label:', labels[1])
+        print('Index of point:', idx[1])
+        print('Cloud index:', cloud_idx)
         break
