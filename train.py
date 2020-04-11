@@ -12,27 +12,60 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
 
-from data import data_loader
+from data import data_loaders
 from model import RandLANet
-from config import cfg
+from utils.config import cfg
 
-def accuracy(scores, labels):
+def accuracy(scores, labels, num_classes=14):
+    r"""
+        Compute the per-class accuracies and the overall accuracy # TODO: complete doc
+
+        Parameters
+        ----------
+        scores:
+
+        labels:
+
+        Returns
+        -------
+        list of floats of length num_classes+1 (last item is overall accuracy)
+    """
     predictions = torch.max(scores, dim=1).indices
-    return (predictions == labels).float().mean()
+    # per_class_acc = []
+    # labels = labels[0]
+    # for lab in range(num_classes):
+    #     idx = (labels == lab)
+    #     if len(idx) == 0 or labels[idx].shape[0]==0:
+    #         proportion = 0
+    #     else :
+    #         correct = (pred_labels[idx] == labels[idx]).float().mean()
+    #     per_class_acc.append(proportion)
+    # class_accuracies.append(per_class_acc)
+    accuracies = []
+
+    accuracy_mask = predictions == labels
+    for label in range(num_classes):
+        label_mask = labels == label
+        per_class_accuracy = (accuracy_mask * label_mask).float().sum()
+        per_class_accuracy /= label_mask.float().sum()
+        accuracies.append(per_class_accuracy.cpu().item())
+    # overall accuracy
+    accuracies.append(accuracy_mask.float().mean().cpu().item())
+    return accuracies
 
 def evaluate(model, loader, criterion, device, desc=None):
     model.eval()
     losses = []
     accuracies = []
     with torch.no_grad():
-        for points, labels in tqdm(loader, desc=desc, leave=False):
+        for points, labels in tqdm(loader, desc=desc, leave=False, ncols=100):
             points = points.to(device)
             labels = labels.to(device)
             scores = model(points)
             loss = criterion(scores, labels)
-            accuracies.append(accuracy(scores, labels).cpu().item())
+            accuracies.append(accuracy(scores, labels))
             losses.append(loss.cpu().item())
-    return np.mean(losses), np.mean(accuracies)
+    return np.mean(losses), np.mean(np.array(accuracies), axis=0)
 
 
 def train(args):
@@ -49,19 +82,9 @@ def train(args):
     except FileNotFoundError:
         num_classes = int(input("Number of distinct classes in the dataset: "))
 
-    train_loader = data_loader(
+    val_loader, train_loader = data_loaders(
         train_path,
-        train=True,
-        split='training',
         batch_size=args.batch_size,
-        num_workers=args.num_workers,
-        pin_memory=True
-    )
-    val_loader = data_loader(
-        train_path,
-        train=True,
-        split='validation',
-        batch_size=1,
         num_workers=args.num_workers,
         pin_memory=True
     )
@@ -76,10 +99,18 @@ def train(args):
         device=args.gpu
     )
 
-    class_weights = np.array(cfg.class_weights)
-    #class_weights = torch.tensor((class_weights / np.sum(class_weights))).float().to(args.gpu)
-    class_weights = F.softmax(torch.from_numpy(class_weights).float(), dim=0).to(args.gpu)
-    criterion = nn.CrossEntropyLoss(weight=torch.clamp(1/class_weights, 1, 1e6))
+    print('Computing weights...', end='\t')
+    samples_per_class = np.array(cfg.class_weights)
+    weight = samples_per_class / float(sum(samples_per_class))
+    class_weights = 1 / (weight + 0.02)
+    # effective = 1.0 - np.power(0.99, samples_per_class)
+    # class_weights = (1 - 0.99) / effective
+    # class_weights = class_weights / (np.sum(class_weights) * num_classes)
+    # class_weights = class_weights / float(sum(class_weights))
+    weights = torch.tensor(class_weights.astype(np.float32)).to(args.gpu)
+    print('Done.')
+    print('Weights : ', weights)
+    criterion = nn.CrossEntropyLoss(weight=weights)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.adam_lr)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, args.scheduler_gamma)
@@ -101,23 +132,31 @@ def train(args):
             model.train()
             losses = []
             accuracies = []
-            for points, labels in tqdm(train_loader, desc=f'[Epoch {epoch:d}/{args.epochs:d}]\tTraining', leave=False):
+            class_accuracies = []
+            for points, labels in tqdm(train_loader, desc=f'[Epoch {epoch:d}/{args.epochs:d}]\tTraining', leave=False, ncols=100):
                 points = points.to(args.gpu)
                 labels = labels.to(args.gpu)
                 optimizer.zero_grad()
+                
                 scores = model(points)
-                loss = criterion(scores, labels)
+                # loss = criterion(pred.squeeze(), labels.squeeze())
+                logp = torch.distributions.utils.probs_to_logits(scores, is_binary=False)
+                loss = criterion(logp, labels)
+                # logpy = torch.gather(logp, 1, labels)
+                # loss = -(logpy).mean()
 
                 loss.backward()
 
                 optimizer.step()
 
                 losses.append(loss.cpu().item())
-                accuracies.append(accuracy(scores, labels).cpu().item())
+                accuracies.append(accuracy(scores, labels))
 
             scheduler.step()
 
-            val_loss, val_acc = evaluate(
+            accs = np.mean(np.array(accuracies), axis=0)
+
+            val_loss, val_accs = evaluate(
                 model,
                 val_loader,
                 criterion,
@@ -125,28 +164,35 @@ def train(args):
                 desc=f'[Epoch {epoch:d}/{args.epochs:d}]\tValidation'
             )
 
-            loss_dic = {
+            loss_dict = {
                 'Training loss':    np.mean(losses),
-                'Validation loss': val_loss
+                'Validation loss':  val_loss
+            }
+            accuracy_dict = {
+                'Training accuracy':    accs[-1],
+                'Validation accuracy':  val_accs[-1]
             }
 
-            accuracy_dic = {
-                'Training accuracy':    np.mean(accuracies),
-                'Validation accuracy':  val_acc
-            }
+            # acc_dicts = [
+            #     {
+            #         f'{i:02d}_train_acc':    acc,
+            #         f'{}':  val_acc
+            #     }
+            #     for i, (acc, val_accs) in enumerate(zip(accs, val_accs))
+            # ]
 
             t1 = time.time()
             # Display results
             print(f'[Epoch {epoch:d}/{args.epochs:d}]', end='\t')
-            for k, v in loss_dic.items():
+            for k, v in loss_dict.items():
                 print(f'{k}: {v:.7f}', end='\t')
 
-            for k, v in accuracy_dic.items():
-                print(f'{k}: {v:.7f}', end='\t')
             d = t1 - t0
             print('\tTime elapsed:', '{:.0f} s'.format(d) if d < 60 else '{:.0f} min {:.0f} s'.format(*divmod(d, 60)))
-            writer.add_scalars('Loss', loss_dic, epoch)
-            writer.add_scalars('Accuracy', accuracy_dic, epoch)
+            print('train acc:', *[f'{acc:.3f}' if not np.isnan(acc) else '0.000' for acc in accs])
+            print('val acc:', *[f'{acc:.3f}' if not np.isnan(acc) else '0.000' for acc in val_accs])
+            writer.add_scalars('Loss', loss_dict, epoch)
+            writer.add_scalars('Accuracy', accuracy_dict, epoch)
 
             if epoch % args.save_freq == 0:
                 torch.save(
@@ -174,7 +220,7 @@ if __name__ == '__main__':
     misc = parser.add_argument_group('Miscellaneous')
 
     base.add_argument('--dataset', type=Path, help='location of the dataset',
-                        default='datasets/s3dis/reprocessed')
+                        default='datasets/s3dis/subsampled')
 
     expr.add_argument('--epochs', type=int, help='number of epochs',
                         default=200)
