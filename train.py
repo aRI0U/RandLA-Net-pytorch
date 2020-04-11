@@ -15,16 +15,14 @@ from data import data_loader
 from model import RandLANet
 from utils.config import cfg
 
-USE_CUDA = torch.cuda.is_available()
-device = 'cuda' if USE_CUDA else 'cpu'
-
-
-def evaluate(model, loader, criterion):
+def evaluate(model, loader, criterion, device, desc=None):
     model.eval()
     losses = []
     accuracies = []
     with torch.no_grad():
-        for points, labels in tqdm(loader, desc='Validation', leave=False):
+        for points, labels in tqdm(loader, desc=desc, leave=False, ncols=1):
+            points = points.to(device)
+            labels = labels.to(device)
             pred = model(points)
             loss = criterion(pred.squeeze(), labels.squeeze())
             pred_labels = torch.argmax(pred[0], 1)
@@ -38,7 +36,7 @@ def train(args):
     train_path = args.dataset / args.train_dir
     val_path = args.dataset / args.val_dir
     logs_dir = args.logs_dir / args.name
-    logs_dir.mkdir(exist_ok=True)
+    logs_dir.mkdir(exist_ok=True, parents=True)
 
     # determine number of classes
     try:
@@ -53,7 +51,9 @@ def train(args):
         device=args.gpu,
         train=True,
         split='training',
-        num_workers=args.num_workers
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
+        pin_memory=True
     )
     # val_loader = data_loader(train_path, device=args.gpu, train=True, split='validation', batch_size=args.batch_size)
     d_in = 6 # next(iter(train_loader))[0].size(-1)
@@ -66,9 +66,17 @@ def train(args):
         device=args.gpu
     )
 
-    class_weights = np.array(cfg.class_weights)
-    class_weights = torch.tensor((class_weights / float(sum(class_weights))).astype(np.float32)).to(device)
-    criterion = nn.CrossEntropyLoss(weight=class_weights)
+    print('Weights calculations ...', end='')
+    samples_per_class = np.array(cfg.class_weights)
+    weight = samples_per_class / float(sum(samples_per_class))
+    class_weights = 1 / (weight + 0.02)
+    # effective = 1.0 - np.power(0.99, samples_per_class)
+    # class_weights = (1 - 0.99) / effective
+    # class_weights = class_weights / (np.sum(class_weights) * num_classes)
+    # class_weights = class_weights / float(sum(class_weights))
+    weights = torch.tensor(class_weights.astype(np.float32)).to(args.gpu)
+    print('Weights : ', weights)
+    criterion = nn.CrossEntropyLoss(weight=weights)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.adam_lr)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, args.scheduler_gamma)
@@ -90,22 +98,49 @@ def train(args):
             model.train()
             losses = []
             accuracies = []
-            for points, labels in tqdm(train_loader, desc='Training', leave=False):
+            class_accuracies = []
+            for points, labels in tqdm(train_loader, desc=f'[Epoch {epoch:d}/{args.epochs:d}]\tTraining', leave=False, ncols=1):
+                points = points.to(args.gpu)
+                labels = labels.to(args.gpu)
                 optimizer.zero_grad()
                 pred = model(points)
-                loss = criterion(pred.squeeze(), labels.squeeze())
+                # loss = criterion(pred.squeeze(), labels.squeeze())
+                logp = torch.distributions.utils.probs_to_logits(pred, is_binary=False)
+                loss = criterion(logp.squeeze(), labels.squeeze())
+                # logpy = torch.gather(logp, 1, labels)
+                # loss = -(logpy).mean()
 
                 loss.backward()
 
                 optimizer.step()
-                scheduler.step()
 
                 losses.append(loss.cpu().item())
                 pred_labels = torch.argmax(pred[0], 1)
                 correct = (pred_labels == labels[0]).float().sum()
                 accuracies.append((correct/points.shape[1]).cpu().item())
 
-            val_loss, val_acc = evaluate(model, val_loader, criterion)
+                per_class_acc = []
+                labels = labels[0]
+                for lab in range(num_classes):
+                    idx = (labels == lab)
+                    if len(idx) == 0 or labels[idx].shape[0]==0:
+                        proportion = 0
+                    else :
+                        correct = (pred_labels[idx] == labels[idx]).float().sum()
+                        proportion = (correct/labels[idx].shape[0]).cpu().item()
+                    per_class_acc.append(proportion)
+                class_accuracies.append(per_class_acc)
+
+            print('\n Per class accuracies : ', np.mean(class_accuracies, axis=0), '\n')
+
+            scheduler.step()
+            val_loss, val_acc = evaluate(
+                model,
+                val_loader,
+                criterion,
+                args.gpu,
+                desc=f'[Epoch {epoch:d}/{args.epochs:d}]\tValidation'
+            )
 
             loss_dic = {
                 'Training loss':    np.mean(losses),
@@ -156,7 +191,7 @@ if __name__ == '__main__':
     misc = parser.add_argument_group('Miscellaneous')
 
     base.add_argument('--dataset', type=Path, help='location of the dataset',
-                        default='datasets/s3dis/extracted/reprocessed/')
+                        default='datasets/s3dis/subsampled')
 
     expr.add_argument('--epochs', type=int, help='number of epochs',
                         default=200)
@@ -188,7 +223,7 @@ if __name__ == '__main__':
     misc.add_argument('--name', type=str, help='name of the experiment',
                         default=None)
     misc.add_argument('--num_workers', type=int, help='number of threads for loading data',
-                        default=0)
+                        default=8)
     misc.add_argument('--save_freq', type=int, help='frequency of saving checkpoints',
                         default=10)
 
