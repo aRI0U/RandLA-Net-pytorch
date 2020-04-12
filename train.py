@@ -14,58 +14,24 @@ from torch.utils.tensorboard import SummaryWriter
 
 from data import data_loaders
 from model import RandLANet
-from utils.config import cfg
+from utils.tools import Config as cfg
+from utils.metrics import accuracy, intersection_over_union
 
-def accuracy(scores, labels, num_classes=14):
-    r"""
-        Compute the per-class accuracies and the overall accuracy # TODO: complete doc
-
-        Parameters
-        ----------
-        scores:
-
-        labels:
-
-        Returns
-        -------
-        list of floats of length num_classes+1 (last item is overall accuracy)
-    """
-    predictions = torch.max(scores, dim=1).indices
-    # per_class_acc = []
-    # labels = labels[0]
-    # for lab in range(num_classes):
-    #     idx = (labels == lab)
-    #     if len(idx) == 0 or labels[idx].shape[0]==0:
-    #         proportion = 0
-    #     else :
-    #         correct = (pred_labels[idx] == labels[idx]).float().mean()
-    #     per_class_acc.append(proportion)
-    # class_accuracies.append(per_class_acc)
-    accuracies = []
-
-    accuracy_mask = predictions == labels
-    for label in range(num_classes):
-        label_mask = labels == label
-        per_class_accuracy = (accuracy_mask * label_mask).float().sum()
-        per_class_accuracy /= label_mask.float().sum()
-        accuracies.append(per_class_accuracy.cpu().item())
-    # overall accuracy
-    accuracies.append(accuracy_mask.float().mean().cpu().item())
-    return accuracies
-
-def evaluate(model, loader, criterion, device, desc=None):
+def evaluate(model, loader, criterion, device):
     model.eval()
     losses = []
     accuracies = []
+    ious = []
     with torch.no_grad():
-        for points, labels in tqdm(loader, desc=desc, leave=False, ncols=80):
+        for points, labels in tqdm(loader, desc='Validation', leave=True):
             points = points.to(device)
             labels = labels.to(device)
             scores = model(points)
             loss = criterion(scores, labels)
-            accuracies.append(accuracy(scores, labels))
             losses.append(loss.cpu().item())
-    return np.mean(losses), np.nanmean(np.array(accuracies), axis=0)
+            accuracies.append(accuracy(scores, labels))
+            ious.append(intersection_over_union(scores, labels))
+    return np.mean(losses), np.nanmean(np.array(accuracies), axis=0), np.nanmean(np.array(ious), axis=0)
 
 
 def train(args):
@@ -109,9 +75,9 @@ def train(args):
     # class_weights = class_weights / (np.sum(class_weights) * num_classes)
     # class_weights = class_weights / float(sum(class_weights))
     # weights = torch.tensor(class_weights).float().to(args.gpu)
-    n_samples = torch.tensor(cfg.class_weights, dtype=torch.float, device=args.gpu, requires_grad=False)
+    n_samples = torch.tensor(cfg.class_weights, dtype=torch.float, device=args.gpu)
     ratio_samples = n_samples / n_samples.sum()
-    weights = ratio_samples
+    weights = 1 / (ratio_samples + 0.02)
     #weights = F.softmin(n_samples)
     # weights = (1/ratio_samples) / (1/ratio_samples).sum()
 
@@ -134,13 +100,18 @@ def train(args):
 
     with SummaryWriter(logs_dir) as writer:
         for epoch in range(first_epoch, args.epochs+1):
+            print(f'=== EPOCH {epoch:d}/{args.epochs:d} ===')
             t0 = time.time()
             # Train
             model.train()
+
+            # metrics
             losses = []
             accuracies = []
-            class_accuracies = []
-            for points, labels in tqdm(train_loader, desc=f'[Epoch {epoch:d}/{args.epochs:d}]\tTraining', leave=False, ncols=80):
+            ious = []
+
+            # iterate over dataset
+            for points, labels in tqdm(train_loader, desc='Training', leave=False):
                 points = points.to(args.gpu)
                 labels = labels.to(args.gpu)
                 optimizer.zero_grad()
@@ -158,17 +129,18 @@ def train(args):
 
                 losses.append(loss.cpu().item())
                 accuracies.append(accuracy(scores, labels))
+                ious.append(intersection_over_union(scores, labels))
 
             scheduler.step()
 
             accs = np.nanmean(np.array(accuracies), axis=0)
+            ious = np.nanmean(np.array(ious), axis=0)
 
-            val_loss, val_accs = evaluate(
+            val_loss, val_accs, val_ious = evaluate(
                 model,
                 val_loader,
                 criterion,
-                args.gpu,
-                desc=f'[Epoch {epoch:d}/{args.epochs:d}]\tValidation'
+                args.gpu
             )
 
             loss_dict = {
@@ -189,15 +161,23 @@ def train(args):
             # ]
 
             t1 = time.time()
+            d = t1 - t0
             # Display results
-            print(f'[Epoch {epoch:d}/{args.epochs:d}]', end='\t')
             for k, v in loss_dict.items():
                 print(f'{k}: {v:.7f}', end='\t')
+            print()
 
-            d = t1 - t0
-            print('\tTime elapsed:', '{:.0f} s'.format(d) if d < 60 else '{:.0f} min {:.0f} s'.format(*divmod(d, 60)))
-            print('train acc:', *[f'{acc:.3f}' for acc in accs], sep='   ')
-            print('val acc:  ', *[f'{acc:.3f}' for acc in val_accs], sep='   ')
+            print('Accuracy     ', *[f'{i:>5d}' for i in range(num_classes)], '   OA', sep=' | ')
+            print('Training:    ', *[f'{acc:.3f}' if not np.isnan(acc) else '  nan' for acc in accs], sep=' | ')
+            print('Validation:  ', *[f'{acc:.3f}' if not np.isnan(acc) else '  nan' for acc in val_accs], sep=' | ')
+
+            print('IoU          ', *[f'{i:>5d}' for i in range(num_classes)], ' mIoU', sep=' | ')
+            print('Training:    ', *[f'{iou:.3f}' if not np.isnan(iou) else '  nan' for iou in ious], sep=' | ')
+            print('Validation:  ', *[f'{iou:.3f}' if not np.isnan(iou) else '  nan' for iou in val_ious], sep=' | ')
+
+            print('Time elapsed:', '{:.0f} s'.format(d) if d < 60 else '{:.0f} min {:02.0f} s'.format(*divmod(d, 60)))
+
+            # send results to tensorboard
             writer.add_scalars('Loss', loss_dict, epoch)
             writer.add_scalars('Accuracy', accuracy_dict, epoch)
 
@@ -263,7 +243,7 @@ if __name__ == '__main__':
     misc.add_argument('--num_workers', type=int, help='number of threads for loading data',
                         default=0)
     misc.add_argument('--save_freq', type=int, help='frequency of saving checkpoints',
-                        default=1)
+                        default=10)
 
     args = parser.parse_args()
 

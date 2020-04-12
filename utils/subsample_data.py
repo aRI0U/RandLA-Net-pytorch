@@ -6,7 +6,7 @@ from pathlib import Path
 from sklearn.neighbors import KDTree
 import pickle
 
-from config import cfg
+from tools import Config as cfg
 from tools import DataProcessing as DP
 import cpp_wrappers.cpp_subsampling.grid_subsampling as cpp_subsampling
 

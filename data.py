@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, IterableDataset, DataLoader, Sampler, BatchSampler
 
-from utils.config import cfg
+from utils.tools import Config as cfg
 from utils.tools import DataProcessing as DP
 
 class PointCloudsDataset(Dataset):
@@ -91,6 +91,7 @@ class CloudsDataset(Dataset):
             sub_npy_file = self.path / '{:s}.npy'.format(cloud_name)
 
             data = np.load(sub_npy_file, mmap_mode='r').T
+
             sub_colors = data[:,3:6]
             sub_labels = data[:,-1].copy()
 
@@ -162,7 +163,7 @@ class ActiveLearningSampler(IterableDataset):
     def spatially_regular_gen(self):
         # Choosing the least known point as center of a new cloud each time.
 
-        for i in range(self.n_samples):  # num_per_epoch
+        for i in range(self.n_samples * cfg.batch_size):  # num_per_epoch
             # t0 = time.time()
             if cfg.sampling_type=='active_learning':
                 # Generator loop
