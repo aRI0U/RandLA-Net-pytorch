@@ -15,9 +15,9 @@ class Config:
     # num_classes = 14  # Number of valid classes
     sub_grid_size = 0.04  # preprocess_parameter
 
-    batch_size = 8
-    train_steps = 50  # Number of steps per epochs
-    val_steps = 50    # Number of validation steps per epoch
+    batch_size = 6
+    train_steps = 200  # Number of steps per epochs
+    val_steps = 100    # Number of validation steps per epoch
     #
     # sub_sampling_ratio = [4, 4, 4, 4, 2]  # sampling ratio of random sampling at each layer
     # d_out = [16, 64, 128, 256, 512]  # feature dimension

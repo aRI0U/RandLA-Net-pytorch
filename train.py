@@ -23,7 +23,7 @@ def evaluate(model, loader, criterion, device):
     accuracies = []
     ious = []
     with torch.no_grad():
-        for points, labels in tqdm(loader, desc='Validation', leave=True):
+        for points, labels in tqdm(loader, desc='Validation', leave=False):
             points = points.to(device)
             labels = labels.to(device)
             scores = model(points)
@@ -147,10 +147,18 @@ def train(args):
                 'Training loss':    np.mean(losses),
                 'Validation loss':  val_loss
             }
-            accuracy_dict = {
-                'Training accuracy':    accs[-1],
-                'Validation accuracy':  val_accs[-1]
-            }
+            acc_dicts = [
+                {
+                    'Training accuracy': acc,
+                    'Validation accuracy': val_acc
+                } for acc, val_acc in zip(accs, val_accs)
+            ]
+            iou_dicts = [
+                {
+                    'Training accuracy': iou,
+                    'Validation accuracy': val_iou
+                } for iou, val_iou in zip(ious, val_ious)
+            ]
 
             # acc_dicts = [
             #     {
@@ -179,7 +187,12 @@ def train(args):
 
             # send results to tensorboard
             writer.add_scalars('Loss', loss_dict, epoch)
-            writer.add_scalars('Accuracy', accuracy_dict, epoch)
+
+            for i in range(num_classes):
+                writer.add_scalars(f'Per-class accuracy/{i+1:02d}', acc_dicts[i], epoch)
+                writer.add_scalars(f'Per-class IoU/{i+1:02d}', iou_dicts[i], epoch)
+            writer.add_scalars('Per-class accuracy/Overall', acc_dicts[-1], epoch)
+            writer.add_scalars('Per-class IoU/Mean IoU', iou_dicts[-1], epoch)
 
             if epoch % args.save_freq == 0:
                 torch.save(
