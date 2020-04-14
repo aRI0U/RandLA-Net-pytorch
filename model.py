@@ -246,18 +246,14 @@ class RandLANet(nn.Module):
         """
         N = input.size(1)
         d = self.decimation
-        # print('input')
-        # print(input, input.shape)
+
         coords = input[...,:3].clone().cpu()
         x = self.fc_start(input).transpose(-2,-1).unsqueeze(-1)
         x = self.bn_start(x) # shape (B, d, N, 1)
-        # print('fc_start')
-        # print(x, x.shape)
+
         decimation_ratio = 1
 
         # <<<<<<<<<< ENCODER
-        # coords, shape (B, N, 3)
-        # x, shape (B, d_in, N, 1)
         x_stack = []
 
         permutation = torch.randperm(N)
@@ -274,16 +270,10 @@ class RandLANet(nn.Module):
 
         # # >>>>>>>>>> ENCODER
 
-        # print()
-
         x = self.mlp(x)
-        # print('mlp')
-        # print(x, x.shape)
 
         # <<<<<<<<<< DECODER
         for mlp in self.decoder:
-            # print('.', end='', flush=True)
-            # upsampling
             neighbors, _ = knn(
                 coords[:,:N//decimation_ratio].cpu().contiguous(), # original set
                 coords[:,:d*N//decimation_ratio].cpu().contiguous(), # upsampled set
@@ -293,28 +283,21 @@ class RandLANet(nn.Module):
 
             extended_neighbors = neighbors.unsqueeze(1).expand(-1, x.size(1), -1, 1)
 
-            # x_neighbors, shape (B, d, N, 1)
-            # x_neighbors[b, d, n, i] = x[b, d, neighbors[b, n, i], i] = x[b, d, extended_neighbors[b, d, n, i], i]
             x_neighbors = torch.gather(x, -2, extended_neighbors)
-            # print('d', x_neighbors.shape, decimation_ratio)
+
             x = torch.cat((x_neighbors, x_stack.pop()), dim=1)
-            # print('dec')
-            # print(x, x.shape)
-            # print(x.shape)
+
             x = mlp(x)
 
             decimation_ratio //= d
-            # print('decoding')
-            # print(x, x.shape)
-        # >>>>>>>>>> DECODER
 
-        # print('\nDone.')
+        # >>>>>>>>>> DECODER
+        # inverse permutation
+        x = x[:,:,torch.argsort(permutation)]
+
         scores = self.fc_end(x)
 
         return scores.squeeze(-1)
-
-
-## 2353 Mb
 
 
 if __name__ == '__main__':
