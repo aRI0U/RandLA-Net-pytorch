@@ -100,3 +100,7 @@ optimization:
 - limit memory usage
 - see whether cross entropy with dtype uint8 possible
 - make num_workers work -->
+
+## Warning
+
+*This repository is still on update, and the segmentation results we reach with our implementation are for now not as good as the ones obtained by the original paper.*
