@@ -6,7 +6,7 @@ from ply import write_ply
 
 output_type = 'npy'
 i_dont_have_a_lot_of_memory_ok = True
-ROOT_PATH = (Path(__file__)  / '/media/tibo/Maxtor/Data/Deepdata/points_cloud').resolve() #(Path(__file__) / '..' / '..').resolve()
+ROOT_PATH = (Path(__file__) / '..' / '..').resolve()
 DATASET_PATH = ROOT_PATH / 'semantic3d'
 RAW_PATH = DATASET_PATH / 'original_data'
 TRAIN_PATH = DATASET_PATH / 'train'
@@ -57,7 +57,7 @@ for pc_path in RAW_PATH.glob('*.txt'):
                     if training_data :
                         np.save(dir / pc_name, np.concatenate((prev_data, np.vstack((points.T, labels[index*bunchsize:(index+1)*bunchsize])).T)))
                     else :
-                        np.save(dir / pc_name, np.concatenate((prev_data, points))
+                        np.save(dir / pc_name, np.concatenate((prev_data, points)))
                     points = []
                     index += 1
             points = np.array(points)
@@ -65,7 +65,7 @@ for pc_path in RAW_PATH.glob('*.txt'):
             if training_data :
                 np.save(dir / pc_name, np.concatenate((prev_data, np.vstack((points.T, labels[index*bunchsize:])).T)))
             else :
-                np.save(dir / pc_name, np.concatenate((prev_data, points))
+                np.save(dir / pc_name, np.concatenate((prev_data, points)))
 
     # If you are memory rich
     else :
