@@ -51,7 +51,7 @@ def train(args):
     train_loader, val_loader = data_loaders(
         args.dataset,
         args.dataset_sampling,
-        batch_size=args.batch_size,
+        batch_size=cfg.batch_size,
         num_workers=args.num_workers,
         pin_memory=True
     )
