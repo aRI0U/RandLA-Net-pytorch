@@ -136,9 +136,10 @@ class CloudsDataset(Dataset):
 
 class ActiveLearningSampler(IterableDataset):
 
-    def __init__(self, dataset, split='training'):
+    def __init__(self, dataset, batch_size=6, split='training'):
         self.dataset = dataset
         self.split = split
+        self.batch_size = batch_size
         self.possibility = {}
         self.min_possibility = {}
 
@@ -163,7 +164,7 @@ class ActiveLearningSampler(IterableDataset):
     def spatially_regular_gen(self):
         # Choosing the least known point as center of a new cloud each time.
 
-        for i in range(self.n_samples * cfg.batch_size):  # num_per_epoch
+        for i in range(self.n_samples * self.batch_size):  # num_per_epoch
             # t0 = time.time()
             if cfg.sampling_type=='active_learning':
                 # Generator loop
@@ -229,8 +230,17 @@ class ActiveLearningSampler(IterableDataset):
 def data_loaders(dir, sampling_method='active_learning', **kwargs):
     if sampling_method == 'active_learning':
         dataset = CloudsDataset(dir / 'train')
-        val_sampler = ActiveLearningSampler(dataset, split='validation')
-        train_sampler = ActiveLearningSampler(dataset, split='training')
+        batch_size = kwargs.get('batch_size', 6)
+        val_sampler = ActiveLearningSampler(
+            dataset,
+            batch_size=batch_size,
+            split='validation'
+        )
+        train_sampler = ActiveLearningSampler(
+            dataset,
+            batch_size=batch_size,
+            split='training'
+        )
         return DataLoader(train_sampler, **kwargs), DataLoader(val_sampler, **kwargs)
 
     if sampling_method == 'naive':

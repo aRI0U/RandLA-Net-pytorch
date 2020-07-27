@@ -68,18 +68,10 @@ def train(args):
 
     print('Computing weights...', end='\t')
     samples_per_class = np.array(cfg.class_weights)
-    # weight = samples_per_class / float(sum(samples_per_class))
-    # class_weights = 1 / (weight + 0.02)
-    # effective = 1.0 - np.power(0.99, samples_per_class)
-    # class_weights = (1 - 0.99) / effective
-    # class_weights = class_weights / (np.sum(class_weights) * num_classes)
-    # class_weights = class_weights / float(sum(class_weights))
-    # weights = torch.tensor(class_weights).float().to(args.gpu)
+
     n_samples = torch.tensor(cfg.class_weights, dtype=torch.float, device=args.gpu)
     ratio_samples = n_samples / n_samples.sum()
     weights = 1 / (ratio_samples + 0.02)
-    #weights = F.softmin(n_samples)
-    # weights = (1/ratio_samples) / (1/ratio_samples).sum()
 
     print('Done.')
     print('Weights:', weights)
@@ -159,14 +151,6 @@ def train(args):
                     'Validation accuracy': val_iou
                 } for iou, val_iou in zip(ious, val_ious)
             ]
-
-            # acc_dicts = [
-            #     {
-            #         f'{i:02d}_train_acc':    acc,
-            #         f'{}':  val_acc
-            #     }
-            #     for i, (acc, val_accs) in enumerate(zip(accs, val_accs))
-            # ]
 
             t1 = time.time()
             d = t1 - t0
