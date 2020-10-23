@@ -1,4 +1,4 @@
-BASE_DIR='/media/tibo/Maxtor/Data/Deepdata/points_cloud/semantic3d/original_data'
+BASE_DIR='../datasets/semantic3d/original_data'
 
 ###../data/semantic3d/original_data
 
