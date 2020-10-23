@@ -83,23 +83,27 @@ class LocalSpatialEncoding(nn.Module):
         idx, dist = knn_output
         B, N, K = idx.size()
         # idx(B, N, K), coords(B, N, 3)
-        # neighbors[b, i, n, k] = coords[b, idx[b, n, k], i] = extended_coords[b, i, extended_idx[b, i, n, k], k]
-        extended_idx = idx.unsqueeze(1).expand(B, 3, N, K)
-        extended_coords = coords.transpose(-2,-1).unsqueeze(-1).expand(B, 3, N, K)
-        neighbors = torch.gather(extended_coords, 2, extended_idx) # shape (B, 3, N, K)
+        # neighbors[b, i, n, k] = coords[b, idx[b, n, k], i] = expanded_coords[b, i, extended_idx[b, i, n, k], k]
+        expanded_idx = idx.unsqueeze(1).expand(B, 3, N, K)
+        expanded_coords = coords.transpose(-2,-1).unsqueeze(-1).expand(B, 3, N, K)
+        neighbor_coords = torch.gather(expanded_coords, 2, expanded_idx) # shape (B, 3, N, K)
+
+        expanded_idx = idx.unsqueeze(1).expand(B, features.size(1), N, K)
+        expanded_features = features.expand(B, -1, N, K)
+        neighbor_features = torch.gather(expanded_features, 2, expanded_idx)
         # if USE_CUDA:
         #     neighbors = neighbors.cuda()
 
         # relative point position encoding
         concat = torch.cat((
-            extended_coords,
-            neighbors,
-            extended_coords - neighbors,
+            expanded_coords,
+            neighbor_coords,
+            expanded_coords - neighbor_coords,
             dist.unsqueeze(-3)
         ), dim=-3).to(self.device)
         return torch.cat((
             self.mlp(concat),
-            features.expand(B, -1, N, K)
+            neighbor_features
         ), dim=-3)
 
 
